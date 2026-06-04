@@ -37,7 +37,7 @@
 #define PT_Y            2
 #define PT_LINE_H       9     // Font 1 line height (7px font + 2px gap)
 #define PT_W            186
-#define PT_H            80    // 5 rows × 16px Font 2
+#define PT_H            (10 * PT_LINE_H)
 #define PT_RX           (PT_X + PT_W)
 #define PAYTABLE_X      PT_X
 

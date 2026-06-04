@@ -116,30 +116,22 @@ static void drawCenterText(int x, int y, const char* s) {
 // ── Paytable ───────────────────────────────────────────────────────────────
 
 static void drawPayTable() {
-    disp->setTextFont(2);
+    disp->setTextFont(1);
 
-    // 2 columns × 5 rows at Font 2 (16px per line)
-    int colW = (PT_W - 10) / 2;
-    int lx = PT_X + 2;
-    int rx = PT_X + colW + 8;
+    for (int i = 0; i < 10; i++) {
+        int rowY = PT_Y + i * PT_LINE_H;
+        uint16_t rowBg = (i % 2 == 0) ? COL_BG : 0x1082;
+        disp->fillRect(PT_X, rowY, PT_W, PT_LINE_H, rowBg);
 
-    for (int row = 0; row < 5; row++) {
-        int rowY = PT_Y + row * 16;
-        uint16_t rowBg = (row % 2 == 0) ? COL_BG : 0x1082;
-        disp->fillRect(PT_X, rowY, PT_W, 16, rowBg);
-
-        // Left column (hands 0-4: best hands)
         disp->setTextDatum(TL_DATUM);
         disp->setTextColor(g_themeColor, rowBg);
-        disp->drawString(WIN_NAMES[row], lx, rowY);
-        drawRightNumber(lx + colW - 4, rowY, (unsigned long)PAYOUTS[row] * BET);
+        disp->drawString(WIN_NAMES[i], PT_X + 2, rowY + 1);
 
-        // Right column (hands 5-9)
-        disp->drawString(WIN_NAMES[row + 5], rx, rowY);
-        drawRightNumber(rx + colW - 4, rowY, (unsigned long)PAYOUTS[row + 5] * BET);
+        disp->setTextColor(g_themeColor, rowBg);
+        drawRightNumber(PT_RX - 2, rowY + 1, (unsigned long)PAYOUTS[i] * BET);
     }
 
-    disp->drawFastVLine(RIGHT_X - 4, PT_Y, 80, COL_DIM_GRAY);
+    disp->drawFastVLine(RIGHT_X - 4, PT_Y, PT_H, COL_DIM_GRAY);
 }
 
 // ── Credits (right panel) ──────────────────────────────────────────────────
@@ -229,21 +221,12 @@ static void updatePayout() {
 
 static void highlightWin(uint16_t col) {
     if (win < 0) return;
-    int colW = (PT_W - 10) / 2;
-    disp->setTextFont(2);
+    int rowY = PT_Y + win * PT_LINE_H;
+    disp->setTextFont(1);
     disp->setTextDatum(TL_DATUM);
-    if (win < 5) {
-        int rowY = PT_Y + win * 16;
-        disp->setTextColor(col, COL_BG);
-        disp->drawString(WIN_NAMES[win], PT_X + 2, rowY);
-        drawRightNumber(PT_X + 2 + colW - 4, rowY, payout);
-    } else {
-        int rx = PT_X + colW + 8;
-        int rowY = PT_Y + (win - 5) * 16;
-        disp->setTextColor(col, COL_BG);
-        disp->drawString(WIN_NAMES[win], rx, rowY);
-        drawRightNumber(rx + colW - 4, rowY, payout);
-    }
+    disp->setTextColor(col, COL_BG);
+    disp->drawString(WIN_NAMES[win], PT_X + 2, rowY + 1);
+    drawRightNumber(PT_RX - 2, rowY + 1, payout);
 }
 
 // ── Empty card slots ───────────────────────────────────────────────────────
@@ -581,7 +564,7 @@ static void redrawAll() {
         // Centered DEAL button — below paytable, above cards
         int dealW = 80, dealH = 28;
         int dealX = SCREEN_W / 2 - dealW / 2;
-        int dealY = 97;
+        int dealY = 102;
         disp->fillRoundRect(dealX, dealY, dealW, dealH, 6, COL_BG);
         disp->drawRoundRect(dealX, dealY, dealW, dealH, 6, g_themeColor);
         disp->drawRoundRect(dealX + 1, dealY + 1, dealW - 2, dealH - 2, 6, g_themeColor);
@@ -1139,7 +1122,7 @@ void loop() {
         // Centered DEAL/NEW GAME button below paytable
         int dealW = 80, dealH = 28;
         int dealX = SCREEN_W / 2 - dealW / 2;
-        int dealY = 97;
+        int dealY = 102;
         bool hitDeal = (tx >= dealX && tx <= dealX + dealW &&
                         ty >= dealY && ty <= dealY + dealH);
         if (hitDeal || (gamePhase == 4 && hitActionButton())) {
