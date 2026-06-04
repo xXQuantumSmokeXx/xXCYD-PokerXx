@@ -35,7 +35,6 @@ Two poker games for the ESP32 Cheap Yellow Display — classic 5-Card Draw Joker
 - Mode toggle button switches between Video Poker and Texas Hold'em
 - Serial screenshot capture via RGB332 protocol (compatible with xXCYD-ScreenCaptureXx)
 - Custom geometric card art — all drawn with TFT_eSPI primitives, no bitmaps
-- Boot splash with four aces
 
 ### Setup
 
