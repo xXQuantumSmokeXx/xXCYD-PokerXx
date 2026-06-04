@@ -39,4 +39,6 @@ pio run --target upload
 ![Texas Hold'em](Main.png)
 
 ## Credits
+Originally inspired by [Jolly-Card-Poker-CYD](https://github.com/dzulidzan/Jolly-Card-Poker-CYD) by dzulidzan. Completely rewritten with custom card art, theming, and Texas Hold'em mode.
+
 Built on the CYD-Weather foundation by xXMayDayXx / xXQuantumSmokeXx.
