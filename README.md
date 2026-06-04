@@ -33,10 +33,10 @@ pio run --target upload
 ## Screenshots
 
 ### Video Poker
-![5-Card Draw](5Card.png)
+![5-Card Draw](VideoPoker.png)
 
 ### Texas Hold'em
-![Texas Hold'em](Main.png)
+![Texas Hold'em](Holdem.png)
 
 ## Credits
 Originally inspired by [Jolly-Card-Poker-CYD](https://github.com/dzulidzan/Jolly-Card-Poker-CYD) by dzulidzan. Completely rewritten with custom card art, theming, and Texas Hold'em mode.
