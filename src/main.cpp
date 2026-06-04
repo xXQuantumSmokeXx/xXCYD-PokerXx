@@ -952,6 +952,9 @@ void setup() {
     tft.setRotation(1);
     tft.fillScreen(COL_BG);
 
+    // Boot splash
+    showSplash();
+    delay(4000);
 
     pinMode(TFT_BL, OUTPUT);
     digitalWrite(TFT_BL, HIGH);
