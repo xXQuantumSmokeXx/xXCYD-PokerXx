@@ -867,27 +867,38 @@ static void applyRotation1() { tft.setRotation(3); }
 static void applyRotation2() {
     tft.setRotation(1);
     tft.writecommand(TFT_MADCTL);
-    tft.writedata(TFT_MAD_MY | TFT_MAD_MV | TFT_MAD_BGR);  // Fix 2: MY only
+    tft.writedata(TFT_MAD_MY | TFT_MAD_MV | TFT_MAD_BGR);
 }
 static void applyRotation3() {
     tft.setRotation(1);
     tft.writecommand(TFT_MADCTL);
-    tft.writedata(TFT_MAD_MX | TFT_MAD_MV | TFT_MAD_BGR);  // MX only
+    tft.writedata(TFT_MAD_MX | TFT_MAD_MV | TFT_MAD_BGR);
 }
 static void applyRotation4() {
     tft.setRotation(1);
     tft.writecommand(TFT_MADCTL);
-    tft.writedata(TFT_MAD_MX | TFT_MAD_MY | TFT_MAD_MV | TFT_MAD_BGR);  // MX+MY
+    tft.writedata(TFT_MAD_MX | TFT_MAD_MY | TFT_MAD_MV | TFT_MAD_BGR);
 }
 
 static const RotationMode ROT_MODES[] = {
-    {"0: rot1 (baseline)",        applyRotation0},
-    {"1: rot3 (full 180)",        applyRotation1},
-    {"2: rot1 + MY flip",         applyRotation2},
-    {"3: rot1 + MX flip",         applyRotation3},
-    {"4: rot1 + MX+MY flip",      applyRotation4},
+    {"rot1 baseline",         applyRotation0},
+    {"rot3 full 180 (FIX)",   applyRotation1},
+    {"rot1 + MY flip",        applyRotation2},
+    {"rot1 + MX flip",        applyRotation3},
+    {"rot1 + MX+MY flip",     applyRotation4},
 };
 static const int ROT_MODE_COUNT = sizeof(ROT_MODES) / sizeof(ROT_MODES[0]);
+
+// Button: bottom-center, full width, tap to cycle
+#define ROT_BTN_X  60
+#define ROT_BTN_Y  190
+#define ROT_BTN_W  200
+#define ROT_BTN_H  40
+
+static bool hitRotateButton() {
+    return (tx >= ROT_BTN_X && tx <= ROT_BTN_X + ROT_BTN_W &&
+            ty >= ROT_BTN_Y && ty <= ROT_BTN_Y + ROT_BTN_H);
+}
 
 static void drawOrientationUI() {
     disp->fillScreen(COL_BG);
@@ -895,65 +906,100 @@ static void drawOrientationUI() {
 
     // Corner labels
     disp->setTextColor(COL_WHITE, COL_BG);
-    disp->setTextDatum(TL_DATUM);
-    disp->drawString("NW", 2, 2);
-    disp->setTextDatum(TR_DATUM);
-    disp->drawString("NE", SCREEN_W - 2, 2);
-    disp->setTextDatum(BL_DATUM);
-    disp->drawString("SW", 2, SCREEN_H - 2);
-    disp->setTextDatum(BR_DATUM);
-    disp->drawString("SE", SCREEN_W - 2, SCREEN_H - 2);
+    disp->setTextDatum(TL_DATUM);  disp->drawString("NW", 2, 2);
+    disp->setTextDatum(TR_DATUM);  disp->drawString("NE", SCREEN_W - 2, 2);
+    disp->setTextDatum(BL_DATUM);  disp->drawString("SW", 2, SCREEN_H - 2);
+    disp->setTextDatum(BR_DATUM);  disp->drawString("SE", SCREEN_W - 2, SCREEN_H - 2);
 
     // Center crosshair
     disp->drawLine(SCREEN_W/2 - 10, SCREEN_H/2, SCREEN_W/2 + 10, SCREEN_H/2, COL_WHITE);
     disp->drawLine(SCREEN_W/2, SCREEN_H/2 - 10, SCREEN_W/2, SCREEN_H/2 + 10, COL_WHITE);
 
-    // Mode indicator — bottom center
+    // Current mode — above button
     disp->setTextDatum(BC_DATUM);
-    disp->drawString(ROT_MODES[g_rotMode].name, SCREEN_W/2, SCREEN_H - 2);
-
-    // Instructions — top center
+    disp->setTextColor(g_themeColor, COL_BG);
+    disp->drawString(ROT_MODES[g_rotMode].name, SCREEN_W/2, ROT_BTN_Y - 10);
+    char buf[16];
+    snprintf(buf, sizeof(buf), "%d/%d", g_rotMode + 1, ROT_MODE_COUNT);
     disp->setTextFont(1);
-    disp->setTextDatum(TC_DATUM);
-    disp->drawString("Serial: 0-4 cycle, Enter to confirm", SCREEN_W/2, 2);
+    disp->drawString(buf, SCREEN_W/2, ROT_BTN_Y - 24);
+
+    // Tap button
+    disp->fillRoundRect(ROT_BTN_X, ROT_BTN_Y, ROT_BTN_W, ROT_BTN_H, 6, COL_BG);
+    disp->drawRoundRect(ROT_BTN_X, ROT_BTN_Y, ROT_BTN_W, ROT_BTN_H, 6, g_themeColor);
+    disp->drawRoundRect(ROT_BTN_X+1, ROT_BTN_Y+1, ROT_BTN_W-2, ROT_BTN_H-2, 6, g_themeColor);
+    disp->setTextFont(2);
+    disp->setTextColor(g_themeColor, COL_BG);
+    disp->setTextDatum(MC_DATUM);
+    disp->drawString("TAP TO ROTATE", SCREEN_W/2, ROT_BTN_Y + ROT_BTN_H/2);
+
+    // Confirm area — top-right corner
+    disp->setTextFont(1);
+    disp->setTextColor(COL_DIM_GRAY, COL_BG);
+    disp->setTextDatum(TR_DATUM);
+    disp->drawString("hold 2s to confirm", SCREEN_W - 2, 2);
+}
+
+// Quick touch read for the orientation test (touch already initialized)
+static bool readTouchQuick() {
+    if (!ts.touched()) return false;
+    TS_Point p = ts.getPoint();
+    tx = map(p.y, TOUCH_Y_MIN, TOUCH_Y_MAX, 0, SCREEN_W - 1);
+    ty = map(p.x, TOUCH_X_MIN, TOUCH_X_MAX, SCREEN_H - 1, 0);
+    tx = constrain(tx, 0, SCREEN_W - 1);
+    ty = constrain(ty, 0, SCREEN_H - 1);
+    return true;
 }
 
 static void runOrientationTest() {
-    Serial.println("\n=== ORIENTATION TEST ===");
-    Serial.println("Type 0-4 to test rotation modes, Enter to confirm current:");
-    for (int i = 0; i < ROT_MODE_COUNT; i++) {
-        Serial.printf("  %s\n", ROT_MODES[i].name);
-    }
-
-    g_rotMode = 1;  // start with rot3 (our candidate fix)
+    g_rotMode = 1;  // start with rot3
     ROT_MODES[g_rotMode].apply();
     drawOrientationUI();
 
-    unsigned long lastChange = millis();
-    bool confirmed = false;
+    unsigned long lastTap = millis();
+    unsigned long holdStart = 0;
+    bool wasTouching = false;
 
-    while (!confirmed) {
-        if (Serial.available()) {
-            int c = Serial.read();
-            if (c == '\n' || c == '\r') {
-                confirmed = true;
-            } else if (c >= '0' && c < '0' + ROT_MODE_COUNT) {
-                g_rotMode = c - '0';
+    while (true) {
+        bool isTouching = readTouchQuick();
+
+        // Detect tap (touch release)
+        if (!isTouching && wasTouching) {
+            if (millis() - holdStart < 1000) {
+                // Short tap — cycle to next mode
+                g_rotMode = (g_rotMode + 1) % ROT_MODE_COUNT;
                 ROT_MODES[g_rotMode].apply();
                 drawOrientationUI();
-                lastChange = millis();
-                Serial.printf("-> %s\n", ROT_MODES[g_rotMode].name);
+                lastTap = millis();
             }
+            holdStart = 0;
         }
 
-        // Auto-confirm after 60 seconds of no input
-        if (millis() - lastChange > 60000) {
-            Serial.println("Timed out — keeping current mode.");
-            confirmed = true;
+        // Detect hold start
+        if (isTouching && !wasTouching) {
+            holdStart = millis();
         }
+
+        // Detect long hold (2 seconds) — confirm
+        if (isTouching && holdStart > 0 && millis() - holdStart >= 2000) {
+            // Visual feedback
+            disp->fillScreen(COL_BG);
+            disp->setTextFont(2);
+            disp->setTextColor(g_themeColor, COL_BG);
+            disp->setTextDatum(MC_DATUM);
+            disp->drawString("CONFIRMED", SCREEN_W/2, SCREEN_H/2 - 10);
+            disp->setTextFont(1);
+            disp->drawString(ROT_MODES[g_rotMode].name, SCREEN_W/2, SCREEN_H/2 + 12);
+            delay(1000);
+            break;
+        }
+
+        // Auto-confirm after 30 seconds of no taps
+        if (millis() - lastTap > 30000) break;
+
+        wasTouching = isTouching;
+        delay(20);
     }
-
-    Serial.printf("Confirmed: %s\n\n", ROT_MODES[g_rotMode].name);
 }
 
 // ── Boot splash ────────────────────────────────────────────────────────────
@@ -1055,17 +1101,21 @@ void setup() {
     tft.setRotation(1);   // 1-USB: standard landscape
 #endif
 
-    Serial.printf("CYD-Poker diag | USB_VER=%d | rotation=%d | W=%d H=%d\n",
-                  CYD_USB_VERSION,
-                  CYD_USB_VERSION == 2 ? 3 : 1,
-                  tft.width(), tft.height());
-
     tft.fillScreen(COL_BG);
 
+    // Init touch early so the orientation test can use it
+    touchSPI.begin(TOUCH_SCLK, TOUCH_MISO, TOUCH_MOSI, TOUCH_CS);
+    ts.begin(touchSPI);
 #if CYD_USB_VERSION == 2
-    // ── Orientation test — interactive ───────────────────────────────────
-    // Tester types 0-4 over serial (115200) to cycle rotation modes.
-    // Corner labels update instantly. Press Enter to confirm.
+    ts.setRotation(2);   // 2-USB: touch panel also physically 180° rotated
+#else
+    ts.setRotation(0);   // 1-USB: standard touch orientation
+#endif
+
+#if CYD_USB_VERSION == 2
+    // ── Orientation test — tap to cycle ──────────────────────────────────
+    // Tap the "TAP TO ROTATE" button to cycle through 5 rotation modes.
+    // Hold anywhere for 2 seconds to confirm. Auto-confirms after 30s.
     runOrientationTest();
 #endif
 
@@ -1075,16 +1125,6 @@ void setup() {
 
     pinMode(TFT_BL, OUTPUT);
     digitalWrite(TFT_BL, HIGH);
-
-    touchSPI.begin(TOUCH_SCLK, TOUCH_MISO, TOUCH_MOSI, TOUCH_CS);
-    ts.begin(touchSPI);
-    // Touch rotation: the XPT2046 touch panel shares the same physical
-    // orientation as the LCD. Rotation 0 = native (matches LCD rotation).
-#if CYD_USB_VERSION == 2
-    ts.setRotation(2);   // 2-USB: touch panel also physically 180° rotated
-#else
-    ts.setRotation(0);   // 1-USB: standard touch orientation
-#endif
 
     redrawAll();
     Serial.println("CYD-Poker ready");
