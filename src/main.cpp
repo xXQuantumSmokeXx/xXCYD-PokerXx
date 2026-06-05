@@ -932,7 +932,12 @@ void setup() {
     holdemInit();
 
     tft.init();
-    tft.setRotation(1);
+#if CYD_USB_VERSION == 2
+    tft.setRotation(3);   // 2-USB version: display is physically flipped 180°
+    tft.invertDisplay(0); // ensure consistent color inversion
+#else
+    tft.setRotation(1);   // 1-USB version: standard landscape
+#endif
     tft.fillScreen(COL_BG);
 
     // Boot splash
@@ -944,7 +949,11 @@ void setup() {
 
     touchSPI.begin(TOUCH_SCLK, TOUCH_MISO, TOUCH_MOSI, TOUCH_CS);
     ts.begin(touchSPI);
-    ts.setRotation(0);
+#if CYD_USB_VERSION == 2
+    ts.setRotation(2);   // 2-USB: touch panel also physically rotated 180°
+#else
+    ts.setRotation(0);   // 1-USB: standard touch orientation
+#endif
 
     redrawAll();
     Serial.println("CYD-Poker ready");
