@@ -854,6 +854,34 @@ static void handleSerialCapture() {
     spr.deleteSprite();
 }
 
+// ── Orientation markers ─────────────────────────────────────────────────────
+
+static void drawOrientationMarkers() {
+    // Draw "NW" "NE" "SW" "SE" in the four corners so the test user can
+    // instantly identify if the display is flipped or mirrored.
+    disp->setTextFont(2);
+    disp->setTextColor(COL_WHITE, COL_BG);
+
+    // NW corner — top-left (should be readable, not upside-down/backwards)
+    disp->setTextDatum(TL_DATUM);
+    disp->drawString("NW", 2, 2);
+    // NE corner — top-right
+    disp->setTextDatum(TR_DATUM);
+    disp->drawString("NE", SCREEN_W - 2, 2);
+    // SW corner — bottom-left
+    disp->setTextDatum(BL_DATUM);
+    disp->drawString("SW", 2, SCREEN_H - 2);
+    // SE corner — bottom-right
+    disp->setTextDatum(BR_DATUM);
+    disp->drawString("SE", SCREEN_W - 2, SCREEN_H - 2);
+
+    // Center crosshair
+    disp->drawLine(SCREEN_W / 2 - 10, SCREEN_H / 2, SCREEN_W / 2 + 10, SCREEN_H / 2, COL_WHITE);
+    disp->drawLine(SCREEN_W / 2, SCREEN_H / 2 - 10, SCREEN_W / 2, SCREEN_H / 2 + 10, COL_WHITE);
+    disp->setTextDatum(MC_DATUM);
+    disp->drawString("C", SCREEN_W / 2, SCREEN_H / 2 + 14);
+}
+
 // ── Boot splash ────────────────────────────────────────────────────────────
 
 static void showSplash() {
@@ -932,25 +960,56 @@ void setup() {
     holdemInit();
 
     tft.init();
-    tft.setRotation(1);   // landscape 320x240
+
+    // ── Display rotation ─────────────────────────────────────────────────
+    // CYD 2.8" has two hardware revisions:
+    //   1-USB (1 USB port):  standard orientation → rotation 1
+    //   2-USB (2 USB ports): LCD physically flipped 180° → rotation 3
+    //
+    // Rotation 3 uses MADCTL = MX|MY|MV|BGR (0xE8) — full 180° landscape
+    // without any manual register override, so TFT_eSPI internals stay
+    // consistent with the hardware orientation.
+    //
+    // If the display still looks wrong, watch the corner labels ("NW" "NE"
+    // "SW" "SE") during the 3-second orientation check before the splash:
+    //   - Labels upside down → wrong rotation (try the other one)
+    //   - Labels mirrored   → need MX flip only
+    //   - Labels upside down + mirrored → need MY flip only
 #if CYD_USB_VERSION == 2
-    // 2-USB CYD has the LCD physically flipped 180° — add MY bit to MADCTL
-    // for a vertical flip while keeping landscape orientation
-    tft.writecommand(TFT_MADCTL);
-    tft.writedata(TFT_MAD_MY | TFT_MAD_MV | TFT_MAD_BGR);
+    tft.setRotation(3);   // 2-USB: full 180° landscape
+#else
+    tft.setRotation(1);   // 1-USB: standard landscape
 #endif
+
+    Serial.printf("CYD-Poker diag | USB_VER=%d | rotation=%d | W=%d H=%d\n",
+                  CYD_USB_VERSION,
+                  CYD_USB_VERSION == 2 ? 3 : 1,
+                  tft.width(), tft.height());
+
     tft.fillScreen(COL_BG);
+
+    // ── Orientation check — 3 seconds ────────────────────────────────────
+    // Shows corner labels so the test user can verify display orientation.
+    // "NW" should be top-left, "NE" top-right, "SW" bottom-left, "SE" bottom-right.
+    drawOrientationMarkers();
+    delay(3000);
 
     // Boot splash
     showSplash();
-    delay(4000);
+    delay(3000);
 
     pinMode(TFT_BL, OUTPUT);
     digitalWrite(TFT_BL, HIGH);
 
     touchSPI.begin(TOUCH_SCLK, TOUCH_MISO, TOUCH_MOSI, TOUCH_CS);
     ts.begin(touchSPI);
-    ts.setRotation(0);   // touch rotation 0 for both hardware versions
+    // Touch rotation: the XPT2046 touch panel shares the same physical
+    // orientation as the LCD. Rotation 0 = native (matches LCD rotation).
+#if CYD_USB_VERSION == 2
+    ts.setRotation(2);   // 2-USB: touch panel also physically 180° rotated
+#else
+    ts.setRotation(0);   // 1-USB: standard touch orientation
+#endif
 
     redrawAll();
     Serial.println("CYD-Poker ready");

@@ -36,15 +36,16 @@ Two poker games for the ESP32 Cheap Yellow Display — classic 5-Card Draw Joker
 - Serial screenshot capture via RGB332 protocol (compatible with xXCYD-ScreenCaptureXx)
 - Custom geometric card art — all drawn with TFT_eSPI primitives, no bitmaps
 
-### Setup
+### Setup (M5Launcher)
 
-1. Copy the correct `firmware-*.bin` onto a micro SD card:
-   - **1-USB board** (1 USB port) → `firmware-1usb.bin`
-   - **2-USB board** (2 USB ports) → `firmware-2usb.bin`
-2. Insert the SD card into your CYD and power it on.
-3. Use the launcher to flash the firmware. No WiFi required.
+1. Download the correct firmware from the [Releases](https://github.com/xXQuantumSmokeXx/xXCYD-PokerXx/releases) page:
+   - **`firmware-1usb.bin`** — for boards with **1 USB port** (USB-C only)
+   - **`firmware-2usb.bin`** — for boards with **2 USB ports** (USB-C + Micro USB)
+2. Copy the `.bin` file onto a micro SD card (FAT32).
+3. Insert the SD card into your CYD and power it on.
+4. Launch [M5Launcher](https://github.com/bmorcelli/M5Launcher), select the firmware, and flash.
 
-If you grabbed the wrong file and the display is upside down, just reflash with the other one.
+If the display is upside down or flipped, you grabbed the wrong file — reflash with the other one.
 
 ### CYD Hardware Version
 
@@ -55,24 +56,7 @@ The CYD 2.8" has two hardware revisions with different display orientations:
 | 1-USB   | 1 USB port (USB-C) | Standard |
 | 2-USB   | 2 USB ports (USB-C + Micro USB) | Physically flipped 180° |
 
-If building from source, edit `src/config.h` for your hardware:
-
-```cpp
-#define CYD_USB_VERSION  1   // 1-USB board
-#define CYD_USB_VERSION  2   // 2-USB board
-```
-
-Then rebuild with `pio run` and flash.
-
-### Build
-
-Build from source with PlatformIO:
-
-```bash
-pio run
-```
-
-The generated firmware is written to `.pio/build/cyd_poker/firmware.bin`.
+Same pinout as the CYD-Weather project.
 
 ### Hardware
 

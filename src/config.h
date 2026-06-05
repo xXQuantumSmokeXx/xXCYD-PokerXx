@@ -4,10 +4,14 @@
 // CYD 2.8" boards have two hardware revisions:
 //   1 = 1-USB version (1 USB port — original)     → display rotation 1
 //   2 = 2-USB version (2 USB ports — newer)       → display rotation 3
-// The 2-USB version has the LCD physically flipped 180° and needs a different
-// rotation so the image isn't upside down.  Change this to 2 if your display
-// is upside down after flashing.
+// The 2-USB version has the LCD physically flipped 180° and needs a full
+// 180° landscape rotation (setRotation(3)) so the image isn't upside down.
+//
+// Default is 1 (1-USB).
+// For 2-USB, override in platformio.ini build_flags with -DCYD_USB_VERSION=2
+#ifndef CYD_USB_VERSION
 #define CYD_USB_VERSION  1
+#endif
 
 // ── Display (ILI9341 on HSPI) ─────────────────────────────────────────────
 #define TFT_MOSI   13
