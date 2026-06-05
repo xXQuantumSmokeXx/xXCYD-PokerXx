@@ -988,15 +988,17 @@ void setup() {
 
     tft.fillScreen(COL_BG);
 
+#if CYD_USB_VERSION == 2
     // ── Orientation check — 3 seconds ────────────────────────────────────
     // Shows corner labels so the test user can verify display orientation.
     // "NW" should be top-left, "NE" top-right, "SW" bottom-left, "SE" bottom-right.
     drawOrientationMarkers();
     delay(3000);
+#endif
 
     // Boot splash
     showSplash();
-    delay(3000);
+    delay(4000);
 
     pinMode(TFT_BL, OUTPUT);
     digitalWrite(TFT_BL, HIGH);
