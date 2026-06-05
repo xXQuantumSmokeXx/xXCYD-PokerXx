@@ -854,32 +854,106 @@ static void handleSerialCapture() {
     spr.deleteSprite();
 }
 
-// ── Orientation markers ─────────────────────────────────────────────────────
+// ── Orientation test (2-USB only) ────────────────────────────────────────────
 
-static void drawOrientationMarkers() {
-    // Draw "NW" "NE" "SW" "SE" in the four corners so the test user can
-    // instantly identify if the display is flipped or mirrored.
+struct RotationMode {
+    const char* name;
+    void (*apply)();
+};
+static int g_rotMode = 1;  // default to rotation 3
+
+static void applyRotation0() { tft.setRotation(1); }
+static void applyRotation1() { tft.setRotation(3); }
+static void applyRotation2() {
+    tft.setRotation(1);
+    tft.writecommand(TFT_MADCTL);
+    tft.writedata(TFT_MAD_MY | TFT_MAD_MV | TFT_MAD_BGR);  // Fix 2: MY only
+}
+static void applyRotation3() {
+    tft.setRotation(1);
+    tft.writecommand(TFT_MADCTL);
+    tft.writedata(TFT_MAD_MX | TFT_MAD_MV | TFT_MAD_BGR);  // MX only
+}
+static void applyRotation4() {
+    tft.setRotation(1);
+    tft.writecommand(TFT_MADCTL);
+    tft.writedata(TFT_MAD_MX | TFT_MAD_MY | TFT_MAD_MV | TFT_MAD_BGR);  // MX+MY
+}
+
+static const RotationMode ROT_MODES[] = {
+    {"0: rot1 (baseline)",        applyRotation0},
+    {"1: rot3 (full 180)",        applyRotation1},
+    {"2: rot1 + MY flip",         applyRotation2},
+    {"3: rot1 + MX flip",         applyRotation3},
+    {"4: rot1 + MX+MY flip",      applyRotation4},
+};
+static const int ROT_MODE_COUNT = sizeof(ROT_MODES) / sizeof(ROT_MODES[0]);
+
+static void drawOrientationUI() {
+    disp->fillScreen(COL_BG);
     disp->setTextFont(2);
-    disp->setTextColor(COL_WHITE, COL_BG);
 
-    // NW corner — top-left (should be readable, not upside-down/backwards)
+    // Corner labels
+    disp->setTextColor(COL_WHITE, COL_BG);
     disp->setTextDatum(TL_DATUM);
     disp->drawString("NW", 2, 2);
-    // NE corner — top-right
     disp->setTextDatum(TR_DATUM);
     disp->drawString("NE", SCREEN_W - 2, 2);
-    // SW corner — bottom-left
     disp->setTextDatum(BL_DATUM);
     disp->drawString("SW", 2, SCREEN_H - 2);
-    // SE corner — bottom-right
     disp->setTextDatum(BR_DATUM);
     disp->drawString("SE", SCREEN_W - 2, SCREEN_H - 2);
 
     // Center crosshair
-    disp->drawLine(SCREEN_W / 2 - 10, SCREEN_H / 2, SCREEN_W / 2 + 10, SCREEN_H / 2, COL_WHITE);
-    disp->drawLine(SCREEN_W / 2, SCREEN_H / 2 - 10, SCREEN_W / 2, SCREEN_H / 2 + 10, COL_WHITE);
-    disp->setTextDatum(MC_DATUM);
-    disp->drawString("C", SCREEN_W / 2, SCREEN_H / 2 + 14);
+    disp->drawLine(SCREEN_W/2 - 10, SCREEN_H/2, SCREEN_W/2 + 10, SCREEN_H/2, COL_WHITE);
+    disp->drawLine(SCREEN_W/2, SCREEN_H/2 - 10, SCREEN_W/2, SCREEN_H/2 + 10, COL_WHITE);
+
+    // Mode indicator — bottom center
+    disp->setTextDatum(BC_DATUM);
+    disp->drawString(ROT_MODES[g_rotMode].name, SCREEN_W/2, SCREEN_H - 2);
+
+    // Instructions — top center
+    disp->setTextFont(1);
+    disp->setTextDatum(TC_DATUM);
+    disp->drawString("Serial: 0-4 cycle, Enter to confirm", SCREEN_W/2, 2);
+}
+
+static void runOrientationTest() {
+    Serial.println("\n=== ORIENTATION TEST ===");
+    Serial.println("Type 0-4 to test rotation modes, Enter to confirm current:");
+    for (int i = 0; i < ROT_MODE_COUNT; i++) {
+        Serial.printf("  %s\n", ROT_MODES[i].name);
+    }
+
+    g_rotMode = 1;  // start with rot3 (our candidate fix)
+    ROT_MODES[g_rotMode].apply();
+    drawOrientationUI();
+
+    unsigned long lastChange = millis();
+    bool confirmed = false;
+
+    while (!confirmed) {
+        if (Serial.available()) {
+            int c = Serial.read();
+            if (c == '\n' || c == '\r') {
+                confirmed = true;
+            } else if (c >= '0' && c < '0' + ROT_MODE_COUNT) {
+                g_rotMode = c - '0';
+                ROT_MODES[g_rotMode].apply();
+                drawOrientationUI();
+                lastChange = millis();
+                Serial.printf("-> %s\n", ROT_MODES[g_rotMode].name);
+            }
+        }
+
+        // Auto-confirm after 60 seconds of no input
+        if (millis() - lastChange > 60000) {
+            Serial.println("Timed out — keeping current mode.");
+            confirmed = true;
+        }
+    }
+
+    Serial.printf("Confirmed: %s\n\n", ROT_MODES[g_rotMode].name);
 }
 
 // ── Boot splash ────────────────────────────────────────────────────────────
@@ -989,11 +1063,10 @@ void setup() {
     tft.fillScreen(COL_BG);
 
 #if CYD_USB_VERSION == 2
-    // ── Orientation check — 3 seconds ────────────────────────────────────
-    // Shows corner labels so the test user can verify display orientation.
-    // "NW" should be top-left, "NE" top-right, "SW" bottom-left, "SE" bottom-right.
-    drawOrientationMarkers();
-    delay(3000);
+    // ── Orientation test — interactive ───────────────────────────────────
+    // Tester types 0-4 over serial (115200) to cycle rotation modes.
+    // Corner labels update instantly. Press Enter to confirm.
+    runOrientationTest();
 #endif
 
     // Boot splash
