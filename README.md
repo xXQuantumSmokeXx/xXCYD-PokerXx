@@ -39,8 +39,8 @@ Two poker games for the ESP32 Cheap Yellow Display — classic 5-Card Draw Joker
 ### Setup
 
 1. Copy the correct `firmware-*.bin` onto a micro SD card:
-   - **1-USB board** (USB-C only) → `firmware-1usb.bin`
-   - **2-USB board** (USB-C + Micro USB) → `firmware-2usb.bin`
+   - **1-USB board** (1 USB port) → `firmware-1usb.bin`
+   - **2-USB board** (2 USB ports) → `firmware-2usb.bin`
 2. Insert the SD card into your CYD and power it on.
 3. Use the launcher to flash the firmware. No WiFi required.
 
@@ -52,8 +52,8 @@ The CYD 2.8" has two hardware revisions with different display orientations:
 
 | Version | Ports | Display orientation |
 |---------|-------|-------------------|
-| 1-USB   | USB-C only | Standard |
-| 2-USB   | USB-C + Micro USB | Physically flipped 180° |
+| 1-USB   | 1 USB port (USB-C) | Standard |
+| 2-USB   | 2 USB ports (USB-C + Micro USB) | Physically flipped 180° |
 
 If building from source, edit `src/config.h` for your hardware:
 
