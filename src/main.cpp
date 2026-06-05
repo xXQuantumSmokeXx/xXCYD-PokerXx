@@ -860,32 +860,32 @@ struct RotationMode {
     const char* name;
     void (*apply)();
 };
-static int g_rotMode = 1;  // default to rotation 3
+static int g_rotMode = 0;  // default to standard landscape
 
 static void applyRotation0() { tft.setRotation(1); }
 static void applyRotation1() { tft.setRotation(3); }
 static void applyRotation2() {
     tft.setRotation(1);
     tft.writecommand(TFT_MADCTL);
-    tft.writedata(TFT_MAD_MY | TFT_MAD_MV | TFT_MAD_BGR);
+    tft.writedata(TFT_MAD_MX | TFT_MAD_BGR);  // mirror X, no MV (landscape)
 }
 static void applyRotation3() {
     tft.setRotation(1);
     tft.writecommand(TFT_MADCTL);
-    tft.writedata(TFT_MAD_MX | TFT_MAD_MV | TFT_MAD_BGR);
+    tft.writedata(TFT_MAD_MY | TFT_MAD_BGR);  // mirror Y, no MV (landscape)
 }
 static void applyRotation4() {
     tft.setRotation(1);
     tft.writecommand(TFT_MADCTL);
-    tft.writedata(TFT_MAD_MX | TFT_MAD_MY | TFT_MAD_MV | TFT_MAD_BGR);
+    tft.writedata(TFT_MAD_MX | TFT_MAD_MY | TFT_MAD_BGR);  // 180°, no MV (landscape)
 }
 
 static const RotationMode ROT_MODES[] = {
-    {"rot1 baseline",         applyRotation0},
-    {"rot3 full 180 (FIX)",   applyRotation1},
-    {"rot1 + MY flip",        applyRotation2},
-    {"rot1 + MX flip",        applyRotation3},
-    {"rot1 + MX+MY flip",     applyRotation4},
+    {"Standard Landscape",     applyRotation0},
+    {"Landscape 180",          applyRotation1},
+    {"Landscape + Mirror X",   applyRotation2},
+    {"Landscape + Mirror Y",   applyRotation3},
+    {"Landscape + Manual 180", applyRotation4},
 };
 static const int ROT_MODE_COUNT = sizeof(ROT_MODES) / sizeof(ROT_MODES[0]);
 
@@ -952,7 +952,7 @@ static bool readTouchQuick() {
 }
 
 static void runOrientationTest() {
-    g_rotMode = 1;  // start with rot3
+    g_rotMode = 0;  // start with standard landscape
     ROT_MODES[g_rotMode].apply();
     drawOrientationUI();
 
