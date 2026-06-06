@@ -39,22 +39,15 @@ Two poker games for the ESP32 Cheap Yellow Display — classic 5-Card Draw Joker
 ### Setup (M5Launcher)
 
 1. Download the correct firmware from the [Releases](https://github.com/xXQuantumSmokeXx/xXCYD-PokerXx/releases) page:
-   - **`firmware-1usb.bin`** — for boards with **1 USB port** (USB-C only)
-   - **`firmware-2usb.bin`** — for boards with **2 USB ports** (USB-C + Micro USB)
+   - **`firmware-2usb.bin`** — ST7789 display (TFT_eSPI)
+   - **`firmware-2usb-lgfx.bin`** — auto-detect display (LovyanGFX) — try this one first
 2. Copy the `.bin` file onto a micro SD card (FAT32).
 3. Insert the SD card into your CYD and power it on.
 4. Launch [M5Launcher](https://github.com/bmorcelli/M5Launcher), select the firmware, and flash.
 
-If the display is upside down or flipped, you grabbed the wrong file — reflash with the other one.
-
 ### CYD Hardware Version
 
-The CYD 2.8" has two hardware revisions with different display orientations:
-
-| Version | Ports | Display orientation |
-|---------|-------|-------------------|
-| 1-USB   | 1 USB port (USB-C) | Standard |
-| 2-USB   | 2 USB ports (USB-C + Micro USB) | Physically flipped 180° |
+This release targets **2USB** boards (USB-C + Micro USB). The display is physically flipped 180° on these boards — the firmware handles rotation automatically.
 
 Same pinout as the CYD-Weather project.
 
