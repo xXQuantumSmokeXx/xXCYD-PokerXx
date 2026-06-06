@@ -39,8 +39,7 @@ Two poker games for the ESP32 Cheap Yellow Display — classic 5-Card Draw Joker
 ### Setup (M5Launcher)
 
 1. Download the correct firmware from the [Releases](https://github.com/xXQuantumSmokeXx/xXCYD-PokerXx/releases) page:
-   - **`firmware-2usb.bin`** — ST7789 display (TFT_eSPI)
-   - **`firmware-2usb-lgfx.bin`** — auto-detect display (LovyanGFX) — try this one first
+   - **`firmware-2usb-lgfx.bin`** — auto-detect display (LovyanGFX)
 2. Copy the `.bin` file onto a micro SD card (FAT32).
 3. Insert the SD card into your CYD and power it on.
 4. Launch [M5Launcher](https://github.com/bmorcelli/M5Launcher), select the firmware, and flash.
