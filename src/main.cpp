@@ -1096,9 +1096,10 @@ void setup() {
     //   - Labels mirrored   → need MX flip only
     //   - Labels upside down + mirrored → need MY flip only
 #if CYD_USB_VERSION == 2
-    tft.setRotation(3);   // 2-USB: full 180° landscape
+    tft.setRotation(3);       // 2-USB: full 180° landscape
+    tft.invertDisplay(true);  // 2-USB: colors are inverted on this variant
 #else
-    tft.setRotation(1);   // 1-USB: standard landscape
+    tft.setRotation(1);       // 1-USB: standard landscape
 #endif
 
     tft.fillScreen(COL_BG);
