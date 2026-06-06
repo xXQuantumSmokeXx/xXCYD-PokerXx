@@ -1,5 +1,11 @@
 #pragma once
+// Display type and macros (TC_DATUM etc.) are needed even for template parsing.
+// holdem.cpp includes this header without a display backend — pull one in.
+#ifdef USE_LOVYAN_GFX
+#include "lgfx_cyd.h"
+#else
 #include <TFT_eSPI.h>
+#endif
 #include "theme.h"
 
 static const char* RANK_NAMES[] = {"J", "A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"};
@@ -15,7 +21,8 @@ inline const char* rankStr(uint8_t rank) {
 
 // ── Suit symbols ──────────────────────────────────────────────────────────
 
-static void drawHeart(TFT_eSPI &tft, int cx, int cy, int sz, uint16_t color) {
+template<typename Gfx>
+static void drawHeart(Gfx &tft, int cx, int cy, int sz, uint16_t color) {
     int r = sz * 3 / 10; if (r < 3) r = 3;
     tft.fillCircle(cx - r + 1, cy - r + 2, r, color);
     tft.fillCircle(cx + r - 1, cy - r + 2, r, color);
@@ -24,12 +31,14 @@ static void drawHeart(TFT_eSPI &tft, int cx, int cy, int sz, uint16_t color) {
     tft.fillTriangle(cx - halfW, cy - r + 2, cx + halfW, cy - r + 2, cx, cy + sz/2 + 1, color);
 }
 
-static void drawDiamond(TFT_eSPI &tft, int cx, int cy, int sz, uint16_t color) {
+template<typename Gfx>
+static void drawDiamond(Gfx &tft, int cx, int cy, int sz, uint16_t color) {
     tft.fillTriangle(cx, cy - sz/2, cx + sz/2, cy, cx, cy + sz/2, color);
     tft.fillTriangle(cx, cy - sz/2, cx - sz/2, cy, cx, cy + sz/2, color);
 }
 
-static void drawClub(TFT_eSPI &tft, int cx, int cy, int sz, uint16_t color) {
+template<typename Gfx>
+static void drawClub(Gfx &tft, int cx, int cy, int sz, uint16_t color) {
     int r = sz * 2 / 9; if (r < 2) r = 2;
     tft.fillCircle(cx, cy - r, r + 1, color);
     tft.fillCircle(cx - r, cy + r - 1, r, color);
@@ -37,7 +46,8 @@ static void drawClub(TFT_eSPI &tft, int cx, int cy, int sz, uint16_t color) {
     tft.fillRect(cx - 2, cy + r + 1, 4, sz/2, color);
 }
 
-static void drawSpade(TFT_eSPI &tft, int cx, int cy, int sz, uint16_t color) {
+template<typename Gfx>
+static void drawSpade(Gfx &tft, int cx, int cy, int sz, uint16_t color) {
     int r = sz * 3 / 10; if (r < 3) r = 3;
     tft.fillTriangle(cx, cy - sz/2, cx - r + 1, cy - r, cx + r - 1, cy - r, color);
     tft.fillCircle(cx - r, cy + 1, r, color);
@@ -46,7 +56,8 @@ static void drawSpade(TFT_eSPI &tft, int cx, int cy, int sz, uint16_t color) {
     tft.fillRect(cx - 2, cy + r + 1, 4, sz/2 + 1, color);
 }
 
-static void drawSuitSymbol(TFT_eSPI &tft, int cx, int cy, int sz, uint8_t suit) {
+template<typename Gfx>
+static void drawSuitSymbol(Gfx &tft, int cx, int cy, int sz, uint8_t suit) {
     uint16_t col = g_themeColor;
     switch (suit) {
         case 0: drawClub(tft, cx, cy, sz, col);    break;
@@ -56,7 +67,8 @@ static void drawSuitSymbol(TFT_eSPI &tft, int cx, int cy, int sz, uint8_t suit) 
     }
 }
 
-static void drawStar(TFT_eSPI &tft, int cx, int cy, int sz, uint16_t color) {
+template<typename Gfx>
+static void drawStar(Gfx &tft, int cx, int cy, int sz, uint16_t color) {
     int rOuter = sz / 2, rInner = sz / 5;
     int pts[10][2];
     for (int i = 0; i < 5; i++) {
@@ -73,7 +85,8 @@ static void drawStar(TFT_eSPI &tft, int cx, int cy, int sz, uint16_t color) {
 
 // ── Card face (black fill, themed outline + symbols) ─────────────────────
 
-static void drawCardFace(TFT_eSPI &tft, int x, int y, uint8_t card) {
+template<typename Gfx>
+static void drawCardFace(Gfx &tft, int x, int y, uint8_t card) {
     uint8_t rank = cardRank(card);
     uint8_t suit = cardSuit(card);
 
@@ -99,7 +112,8 @@ static void drawCardFace(TFT_eSPI &tft, int x, int y, uint8_t card) {
 
 // ── Card back ─────────────────────────────────────────────────────────────
 
-static void drawCardBack(TFT_eSPI &tft, int x, int y) {
+template<typename Gfx>
+static void drawCardBack(Gfx &tft, int x, int y) {
     tft.fillRect(x + 1, y + 1, CARD_W - 1, CARD_H - 1, COL_BG);
     tft.drawRoundRect(x, y, CARD_W, CARD_H, 5, g_themeColor);
     tft.drawRoundRect(x + 2, y + 2, CARD_W - 4, CARD_H - 4, 4, g_themeColor);
@@ -113,7 +127,8 @@ static void drawCardBack(TFT_eSPI &tft, int x, int y) {
 
 // ── Hold frame ────────────────────────────────────────────────────────────
 
-static void drawHoldFrame(TFT_eSPI &tft, int i, bool held, bool clear) {
+template<typename Gfx>
+static void drawHoldFrame(Gfx &tft, int i, bool held, bool clear) {
     int x = PAYTABLE_X + i * CARD_GAP;
     int fx = x - 2, fy = CARD_Y - 2, fw = CARD_W + 4, fh = CARD_H + 14;
     if (held) {

@@ -4,7 +4,36 @@
  */
 
 #include <Arduino.h>
-#include <TFT_eSPI.h>
+
+#ifdef USE_LOVYAN_GFX
+  #include "lgfx_cyd.h"
+  typedef LGFX_CYD          GfxDisplay;
+  typedef lgfx::LGFX_Sprite GfxSprite;
+  static LGFX_CYD             tft;
+  static lgfx::LovyanGFX     *disp = &tft;  // LGFX_Base* — shared by Device & Sprite
+#else
+  #include <TFT_eSPI.h>
+  typedef TFT_eSPI    GfxDisplay;
+  typedef TFT_eSprite GfxSprite;
+  static TFT_eSPI     tft;
+  static TFT_eSPI    *disp = &tft;
+#endif
+
+// setTextFont compatibility — LGFX base class lacks setTextFont(uint8_t),
+// so we route through this helper in both builds for consistency.
+#ifdef USE_LOVYAN_GFX
+  static void dispSetFont(lgfx::LovyanGFX *d, uint8_t n) {
+      static const lgfx::IFont* const tbl[] = {
+          &lgfx::fonts::Font0, &lgfx::fonts::Font0,  // 0,1 → GLCD
+          &lgfx::fonts::Font2, nullptr,                // 2 → 16 px
+          &lgfx::fonts::Font4, nullptr, nullptr, nullptr,
+      };
+      if (n < 8 && tbl[n]) d->setFont(tbl[n]);
+  }
+#else
+  static void dispSetFont(TFT_eSPI *d, uint8_t n) { d->setTextFont(n); }
+#endif
+
 #include <SPI.h>
 #include <XPT2046_Touchscreen.h>
 #include <Preferences.h>
@@ -13,8 +42,6 @@
 #include "cards.h"
 #include "holdem.h"
 
-static TFT_eSPI    tft;
-static TFT_eSPI   *disp = &tft;
 static SPIClass    touchSPI(VSPI);
 static XPT2046_Touchscreen ts(TOUCH_CS);
 
@@ -88,7 +115,7 @@ static void goToSleep() {
     saveCredits();
     // Show sleep message briefly
     disp->fillScreen(COL_BG);
-    disp->setTextFont(2);
+    dispSetFont(disp,2);
     disp->setTextColor(g_themeColor, COL_BG);
     disp->setTextDatum(MC_DATUM);
     disp->drawString("SLEEP", SCREEN_W / 2, SCREEN_H / 2);
@@ -116,7 +143,7 @@ static void drawCenterText(int x, int y, const char* s) {
 // ── Paytable ───────────────────────────────────────────────────────────────
 
 static void drawPayTable() {
-    disp->setTextFont(1);
+    dispSetFont(disp,1);
 
     for (int i = 0; i < 10; i++) {
         int rowY = PT_Y + i * PT_LINE_H;
@@ -138,12 +165,12 @@ static void drawPayTable() {
 
 static void drawCredits() {
     disp->fillRect(RIGHT_X, 2, RIGHT_W, 54, COL_BG);
-    disp->setTextFont(1);
+    dispSetFont(disp,1);
     disp->setTextColor(g_themeColor, COL_BG);
     disp->setTextDatum(TC_DATUM);
     disp->drawString("CREDITS", CREDITS_CX, 4);
     disp->drawString(g_themes[g_themeIdx].name, CREDITS_CX, 14);
-    disp->setTextFont(4);
+    dispSetFont(disp,4);
     disp->setTextColor(g_themeColor, COL_BG);
     char buf[12];
     snprintf(buf, sizeof(buf), "%lu", credits);
@@ -159,7 +186,7 @@ static void drawActionButton(const char* label) {
     disp->fillRoundRect(BTN_X, BTN_Y, BTN_W, BTN_H, 5, COL_BG);
     disp->drawRoundRect(BTN_X, BTN_Y, BTN_W, BTN_H, 5, g_themeColor);
     disp->drawRoundRect(BTN_X + 1, BTN_Y + 1, BTN_W - 2, BTN_H - 2, 5, g_themeColor);
-    disp->setTextFont(2);
+    dispSetFont(disp,2);
     disp->setTextColor(g_themeColor, COL_BG);
     drawCenterText(BTN_X + BTN_W / 2, BTN_Y + BTN_H / 2, label);
 }
@@ -179,7 +206,7 @@ static void drawGambleButtons() {
         disp->fillRoundRect(GMBL_X, by, GMBL_W, GMBL_H, 4, COL_BG);
         disp->drawRoundRect(GMBL_X, by, GMBL_W, GMBL_H, 4, g_themeColor);
         disp->drawRoundRect(GMBL_X + 1, by + 1, GMBL_W - 2, GMBL_H - 2, 4, g_themeColor);
-        disp->setTextFont(2);
+        dispSetFont(disp,2);
         disp->setTextColor(g_themeColor, COL_BG);
         drawCenterText(GMBL_X + GMBL_W / 2, by + GMBL_H / 2, labels[i]);
     }
@@ -198,7 +225,7 @@ static int hitGambleButton() {
 
 static void drawMessage(const char* msg, uint16_t col) {
     disp->fillRect(0, MSG_Y, SCREEN_W, MSG_H, COL_BG);
-    disp->setTextFont(2);
+    dispSetFont(disp,2);
     disp->setTextColor(col, COL_BG);
     drawCenterText(SCREEN_W / 2, MSG_Y + MSG_H / 2, msg);
 }
@@ -211,7 +238,7 @@ static void clearWinBox() {
 }
 
 static void updatePayout() {
-    disp->setTextFont(4);
+    dispSetFont(disp,4);
     disp->setTextColor(COL_WHITE, COL_WIN_BG);
     disp->setTextDatum(MC_DATUM);
     char buf[12];
@@ -222,7 +249,7 @@ static void updatePayout() {
 static void highlightWin(uint16_t col) {
     if (win < 0) return;
     int rowY = PT_Y + win * PT_LINE_H;
-    disp->setTextFont(1);
+    dispSetFont(disp,1);
     disp->setTextDatum(TL_DATUM);
     disp->setTextColor(col, COL_BG);
     disp->drawString(WIN_NAMES[win], PT_X + 2, rowY + 1);
@@ -247,7 +274,7 @@ static void drawModeToggle() {
     disp->fillRoundRect(MODE_BTN_X, MODE_BTN_Y, MODE_BTN_W, MODE_BTN_H, 5, COL_BG);
     disp->drawRoundRect(MODE_BTN_X, MODE_BTN_Y, MODE_BTN_W, MODE_BTN_H, 5, g_themeColor);
     disp->drawRoundRect(MODE_BTN_X + 1, MODE_BTN_Y + 1, MODE_BTN_W - 2, MODE_BTN_H - 2, 5, g_themeColor);
-    disp->setTextFont(1);
+    dispSetFont(disp,1);
     disp->setTextColor(g_themeColor, COL_BG);
     drawCenterText(MODE_BTN_X + MODE_BTN_W / 2, MODE_BTN_Y + MODE_BTN_H / 2, label);
 }
@@ -269,7 +296,7 @@ static void drawSmallCardFace(int x, int y, uint8_t card) {
     disp->drawRoundRect(x, y, HCARD_W, HCARD_H, 4, col);
 
     if (rank == 0) {
-        disp->setTextFont(1);
+        dispSetFont(disp,1);
         disp->setTextColor(g_themeColor, fill);
         disp->setTextDatum(MC_DATUM);
         disp->drawString("J", x + HCARD_W/2, y + HCARD_H/2);
@@ -277,7 +304,7 @@ static void drawSmallCardFace(int x, int y, uint8_t card) {
     }
 
     // Corner rank (top-left)
-    disp->setTextFont(1);
+    dispSetFont(disp,1);
     disp->setTextColor(col, fill);
     disp->setTextDatum(TL_DATUM);
     disp->drawString(rankStr(rank), x + 3, y + 2);
@@ -312,7 +339,7 @@ static void drawHoldemScreen() {
         int mw = 76, mh = 14, mx = 4, my = 2;
         disp->fillRoundRect(mx, my, mw, mh, 3, COL_BG);
         disp->drawRoundRect(mx, my, mw, mh, 3, g_themeColor);
-        disp->setTextFont(1);
+        dispSetFont(disp,1);
         disp->setTextColor(g_themeColor, COL_BG);
         drawCenterText(mx + mw / 2, my + mh / 2, mlabel);
     }
@@ -323,7 +350,7 @@ static void drawHoldemScreen() {
         disp->fillRoundRect(mx, my, mw, mh, 4, COL_BG);
         disp->drawRoundRect(mx, my, mw, mh, 4, g_themeColor);
         disp->drawRoundRect(mx + 1, my + 1, mw - 2, mh - 2, 4, g_themeColor);
-        disp->setTextFont(1);
+        dispSetFont(disp,1);
         disp->setTextColor(g_themeColor, COL_BG);
         drawCenterText(mx + mw / 2, my + mh / 2, "VIDEO POKER");
     }
@@ -340,7 +367,7 @@ static void drawHoldemScreen() {
 
     // ── AI cards + info (top-left) ──
     if (g_hm.stage >= HM_PREFLOP) {
-        disp->setTextFont(1);
+        dispSetFont(disp,1);
         disp->setTextDatum(TL_DATUM);
 
         // Name + stack
@@ -370,7 +397,7 @@ static void drawHoldemScreen() {
     }
 
     // ── POT + Blinds (top-right, flush right) ──
-    disp->setTextFont(1);
+    dispSetFont(disp,1);
     disp->setTextDatum(TR_DATUM);
     disp->setTextColor(g_themeColor, COL_BG);
     snprintf(buf, sizeof(buf), "POT:%lu", g_hm.pot);
@@ -396,7 +423,7 @@ static void drawHoldemScreen() {
             uint16_t col = suitColor(suit);
             disp->fillRoundRect(cx, commY, HCCARD_W, HCCARD_H, 4, fill);
             disp->drawRoundRect(cx, commY, HCCARD_W, HCCARD_H, 4, col);
-            disp->setTextFont(1);
+            dispSetFont(disp,1);
             disp->setTextColor(col, fill);
             disp->setTextDatum(TL_DATUM);
             disp->drawString(rankStr(rank), cx + 3, commY + 3);
@@ -419,7 +446,7 @@ static void drawHoldemScreen() {
     int commH = HCCARD_H;
 
     // ── Stage label + last action (between community and player) ──
-    disp->setTextFont(1);
+    dispSetFont(disp,1);
     disp->setTextDatum(TC_DATUM);
     const char* stageName = "";
     switch (g_hm.stage) {
@@ -440,7 +467,7 @@ static void drawHoldemScreen() {
     disp->drawString(stageName, midCardCX, stageY);
 
     // ── Player cards + info (bottom) ──
-    disp->setTextFont(1);
+    dispSetFont(disp,1);
     disp->setTextDatum(TL_DATUM);
 
     disp->setTextColor(g_themeColor, COL_BG);
@@ -471,7 +498,7 @@ static void drawHoldemScreen() {
         disp->fillRoundRect(dX, commY + 10, dW, dH, 6, COL_BG);
         disp->drawRoundRect(dX, commY + 10, dW, dH, 6, g_themeColor);
         disp->drawRoundRect(dX + 1, commY + 11, dW - 2, dH - 2, 6, g_themeColor);
-        disp->setTextFont(2);
+        dispSetFont(disp,2);
         disp->setTextColor(g_themeColor, COL_BG);
         drawCenterText(cardCX, commY + 10 + dH / 2, "DEAL");
 
@@ -486,7 +513,7 @@ static void drawHoldemScreen() {
         disp->fillRoundRect(foldX, plyY + 2, HM_SIDE_BTN_W, rh, 4, COL_BG);
         disp->drawRoundRect(foldX, plyY + 2, HM_SIDE_BTN_W, rh, 4, g_themeColor);
         disp->drawRoundRect(foldX + 1, plyY + 3, HM_SIDE_BTN_W - 2, rh - 2, 4, g_themeColor);
-        disp->setTextFont(2);
+        dispSetFont(disp,2);
         disp->setTextColor(g_themeColor, COL_BG);
         disp->setTextDatum(MC_DATUM);
         disp->drawString("FOLD", foldX + HM_SIDE_BTN_W / 2, plyY + 2 + rh / 2);
@@ -496,7 +523,7 @@ static void drawHoldemScreen() {
         disp->fillRoundRect(foldX, resetY, HM_SIDE_BTN_W, rh, 4, COL_BG);
         disp->drawRoundRect(foldX, resetY, HM_SIDE_BTN_W, rh, 4, g_themeColor);
         disp->drawRoundRect(foldX + 1, resetY + 1, HM_SIDE_BTN_W - 2, rh - 2, 4, g_themeColor);
-        disp->setTextFont(2);
+        dispSetFont(disp,2);
         disp->setTextColor(g_themeColor, COL_BG);
         disp->drawString("RESET", foldX + HM_SIDE_BTN_W / 2, resetY + rh / 2);
 
@@ -507,7 +534,7 @@ static void drawHoldemScreen() {
         disp->fillRoundRect(rightX, plyY + 2, rw, rh, 4, COL_BG);
         disp->drawRoundRect(rightX, plyY + 2, rw, rh, 4, g_themeColor);
         disp->drawRoundRect(rightX + 1, plyY + 3, rw - 2, rh - 2, 4, g_themeColor);
-        disp->setTextFont(2);
+        dispSetFont(disp,2);
         disp->setTextColor(g_themeColor, COL_BG);
         disp->drawString(callLabel, rightX + rw / 2, plyY + 2 + rh / 2);
 
@@ -526,7 +553,7 @@ static void drawHoldemScreen() {
         disp->fillRoundRect(btnX, btnY, btnW, btnH, 6, COL_BG);
         disp->drawRoundRect(btnX, btnY, btnW, btnH, 6, g_themeColor);
         disp->drawRoundRect(btnX + 1, btnY + 1, btnW - 2, btnH - 2, 6, g_themeColor);
-        disp->setTextFont(2);
+        dispSetFont(disp,2);
         disp->setTextColor(g_themeColor, COL_BG);
         drawCenterText(btnX + btnW / 2, btnY + btnH / 2, "NEXT HAND");
 
@@ -535,7 +562,7 @@ static void drawHoldemScreen() {
             int gapTop = commY + HCCARD_H;
             int gapH = plyY - gapTop;
             disp->fillRect(0, gapTop, SCREEN_W, gapH, COL_BG);
-            disp->setTextFont(2);
+            dispSetFont(disp,2);
             disp->setTextColor(g_themeColor, COL_BG);
             disp->setTextDatum(MC_DATUM);
             disp->drawString(g_hm.lastAction, cardCX, gapTop + gapH / 2);
@@ -568,7 +595,7 @@ static void redrawAll() {
         disp->fillRoundRect(dealX, dealY, dealW, dealH, 6, COL_BG);
         disp->drawRoundRect(dealX, dealY, dealW, dealH, 6, g_themeColor);
         disp->drawRoundRect(dealX + 1, dealY + 1, dealW - 2, dealH - 2, 6, g_themeColor);
-        disp->setTextFont(2);
+        dispSetFont(disp,2);
         disp->setTextColor(g_themeColor, COL_BG);
         drawCenterText(SCREEN_W / 2, dealY + dealH / 2, "DEAL");
         // Mode toggle stays in right panel
@@ -590,7 +617,7 @@ static void redrawAll() {
     } else if (gamePhase == 2) {
         drawActionButton("COLLECT");
         clearWinBox();
-        disp->setTextFont(2);
+        dispSetFont(disp,2);
         disp->setTextColor(COL_WHITE, COL_WIN_BG);
         drawCenterText(PT_X + PT_W / 2, PT_Y + PT_H / 3, WIN_NAMES[win]);
         updatePayout();
@@ -604,7 +631,7 @@ static void redrawAll() {
 
     } else if (gamePhase == 4) {
         clearWinBox();
-        disp->setTextFont(2);
+        dispSetFont(disp,2);
         disp->setTextColor(COL_WHITE, COL_WIN_BG);
         drawCenterText(PT_X + PT_W / 2, PT_Y + PT_H / 3, "GAME OVER");
         updatePayout();
@@ -619,7 +646,7 @@ static void redrawAll() {
 static void showThemeName() {
     // Briefly show theme name in message area
     disp->fillRect(RIGHT_X, 2, RIGHT_W, 54, COL_BG);
-    disp->setTextFont(2);
+    dispSetFont(disp,2);
     disp->setTextColor(g_themeColor, COL_BG);
     disp->setTextDatum(MC_DATUM);
     disp->drawString(g_themes[g_themeIdx].name, CREDITS_CX, BTN_Y - 14);
@@ -688,7 +715,7 @@ static void finalDraw() {
     evaluateWin(false);
     if (win >= 0) {
         clearWinBox();
-        disp->setTextFont(2);
+        dispSetFont(disp,2);
         disp->setTextColor(COL_WHITE, COL_WIN_BG);
         drawCenterText(PT_X + PT_W / 2, PT_Y + PT_H / 3, WIN_NAMES[win]);
         updatePayout();
@@ -703,7 +730,7 @@ static void finalDraw() {
         disp->fillRoundRect(SCREEN_W/2 - 40, 106, 80, 28, 6, COL_BG);
         disp->drawRoundRect(SCREEN_W/2 - 40, 106, 80, 28, 6, g_themeColor);
         disp->drawRoundRect(SCREEN_W/2 - 40 + 1, 107, 78, 26, 6, g_themeColor);
-        disp->setTextFont(2);
+        dispSetFont(disp,2);
         disp->setTextColor(g_themeColor, COL_BG);
         drawCenterText(SCREEN_W / 2, 120, "DEAL");
         gamePhase = 0;
@@ -836,7 +863,7 @@ static void evaluateWin(bool doHold) {
 // ── Serial capture ─────────────────────────────────────────────────────────
 
 static void handleSerialCapture() {
-    TFT_eSprite spr(&tft);
+    GfxSprite spr(&tft);
     spr.setColorDepth(8);
     uint8_t *fb = (uint8_t *)spr.createSprite(SCREEN_W, SCREEN_H);
     if (!fb) {
@@ -844,7 +871,7 @@ static void handleSerialCapture() {
         Serial.println(ESP.getMaxAllocHeap());
         return;
     }
-    TFT_eSPI *prev = disp;
+    auto *prev = disp;
     disp = &spr;
     redrawAll();
     disp = prev;
@@ -862,32 +889,49 @@ struct RotationMode {
 };
 static int g_rotMode = 0;  // default to standard landscape
 
-static void applyRotation0() { tft.setRotation(1); }
-static void applyRotation1() { tft.setRotation(3); }
-static void applyRotation2() {
-    tft.setRotation(1);
-    tft.writecommand(TFT_MADCTL);
-    tft.writedata(TFT_MAD_MX | TFT_MAD_BGR);  // mirror X, no MV (landscape)
-}
-static void applyRotation3() {
-    tft.setRotation(1);
-    tft.writecommand(TFT_MADCTL);
-    tft.writedata(TFT_MAD_MY | TFT_MAD_BGR);  // mirror Y, no MV (landscape)
-}
-static void applyRotation4() {
-    tft.setRotation(1);
-    tft.writecommand(TFT_MADCTL);
-    tft.writedata(TFT_MAD_MX | TFT_MAD_MY | TFT_MAD_BGR);  // 180°, no MV (landscape)
-}
+#ifdef USE_LOVYAN_GFX
+  // LovyanGFX natively supports rotations 0-7 — all mirror / flip combos.
+  static void applyRotationN(int n) { tft.setRotation(n); }
 
-static const RotationMode ROT_MODES[] = {
-    {"Standard Landscape",     applyRotation0},
-    {"Landscape 180",          applyRotation1},
-    {"Landscape + Mirror X",   applyRotation2},
-    {"Landscape + Mirror Y",   applyRotation3},
-    {"Landscape + Manual 180", applyRotation4},
-};
-static const int ROT_MODE_COUNT = sizeof(ROT_MODES) / sizeof(ROT_MODES[0]);
+  static const RotationMode ROT_MODES[] = {
+      {"Rot 0 Portrait",            []{ applyRotationN(0); }},
+      {"Rot 1 Landscape",           []{ applyRotationN(1); }},
+      {"Rot 2 Portrait 180",        []{ applyRotationN(2); }},
+      {"Rot 3 Landscape 180",       []{ applyRotationN(3); }},
+      {"Rot 4 Portrait Mirror",     []{ applyRotationN(4); }},
+      {"Rot 5 Landscape Mirror",    []{ applyRotationN(5); }},
+      {"Rot 6 Portrait 180 Mirr",   []{ applyRotationN(6); }},
+      {"Rot 7 Landscape 180 Mirr",  []{ applyRotationN(7); }},
+  };
+  static const int ROT_MODE_COUNT = sizeof(ROT_MODES) / sizeof(ROT_MODES[0]);
+#else
+  static void applyRotation0() { tft.setRotation(1); }
+  static void applyRotation1() { tft.setRotation(3); }
+  static void applyRotation2() {
+      tft.setRotation(1);
+      tft.writecommand(TFT_MADCTL);
+      tft.writedata(TFT_MAD_MX | TFT_MAD_BGR);
+  }
+  static void applyRotation3() {
+      tft.setRotation(1);
+      tft.writecommand(TFT_MADCTL);
+      tft.writedata(TFT_MAD_MY | TFT_MAD_BGR);
+  }
+  static void applyRotation4() {
+      tft.setRotation(1);
+      tft.writecommand(TFT_MADCTL);
+      tft.writedata(TFT_MAD_MX | TFT_MAD_MY | TFT_MAD_BGR);
+  }
+
+  static const RotationMode ROT_MODES[] = {
+      {"Standard Landscape",     applyRotation0},
+      {"Landscape 180",          applyRotation1},
+      {"Landscape + Mirror X",   applyRotation2},
+      {"Landscape + Mirror Y",   applyRotation3},
+      {"Landscape + Manual 180", applyRotation4},
+  };
+  static const int ROT_MODE_COUNT = sizeof(ROT_MODES) / sizeof(ROT_MODES[0]);
+#endif
 
 // Button: bottom-center, full width, tap to cycle
 #define ROT_BTN_X  60
@@ -902,7 +946,7 @@ static bool hitRotateButton() {
 
 static void drawOrientationUI() {
     disp->fillScreen(COL_BG);
-    disp->setTextFont(2);
+    dispSetFont(disp,2);
 
     // Corner labels
     disp->setTextColor(COL_WHITE, COL_BG);
@@ -921,20 +965,20 @@ static void drawOrientationUI() {
     disp->drawString(ROT_MODES[g_rotMode].name, SCREEN_W/2, ROT_BTN_Y - 10);
     char buf[16];
     snprintf(buf, sizeof(buf), "%d/%d", g_rotMode + 1, ROT_MODE_COUNT);
-    disp->setTextFont(1);
+    dispSetFont(disp,1);
     disp->drawString(buf, SCREEN_W/2, ROT_BTN_Y - 24);
 
     // Tap button
     disp->fillRoundRect(ROT_BTN_X, ROT_BTN_Y, ROT_BTN_W, ROT_BTN_H, 6, COL_BG);
     disp->drawRoundRect(ROT_BTN_X, ROT_BTN_Y, ROT_BTN_W, ROT_BTN_H, 6, g_themeColor);
     disp->drawRoundRect(ROT_BTN_X+1, ROT_BTN_Y+1, ROT_BTN_W-2, ROT_BTN_H-2, 6, g_themeColor);
-    disp->setTextFont(2);
+    dispSetFont(disp,2);
     disp->setTextColor(g_themeColor, COL_BG);
     disp->setTextDatum(MC_DATUM);
     disp->drawString("TAP TO ROTATE", SCREEN_W/2, ROT_BTN_Y + ROT_BTN_H/2);
 
     // Confirm area — top-right corner
-    disp->setTextFont(1);
+    dispSetFont(disp,1);
     disp->setTextColor(COL_DIM_GRAY, COL_BG);
     disp->setTextDatum(TR_DATUM);
     disp->drawString("hold 2s to confirm", SCREEN_W - 2, 2);
@@ -984,11 +1028,11 @@ static void runOrientationTest() {
         if (isTouching && holdStart > 0 && millis() - holdStart >= 2000) {
             // Visual feedback
             disp->fillScreen(COL_BG);
-            disp->setTextFont(2);
+            dispSetFont(disp,2);
             disp->setTextColor(g_themeColor, COL_BG);
             disp->setTextDatum(MC_DATUM);
             disp->drawString("CONFIRMED", SCREEN_W/2, SCREEN_H/2 - 10);
-            disp->setTextFont(1);
+            dispSetFont(disp,1);
             disp->drawString(ROT_MODES[g_rotMode].name, SCREEN_W/2, SCREEN_H/2 + 12);
             delay(1000);
             break;
@@ -1034,7 +1078,7 @@ static void showSplash() {
         // Rank
         uint8_t suit = cardSuit(aces[i]);
         uint16_t col = suitColor(suit);
-        disp->setTextFont(4);
+        dispSetFont(disp,4);
         disp->setTextColor(col, fill);
         disp->setTextDatum(MC_DATUM);
         disp->drawString("A", cx + cardW/2, cy + cardH/2 - 4);
@@ -1045,13 +1089,13 @@ static void showSplash() {
 
     // ── Branding ──
     int tw;
-    disp->setTextFont(4);
+    dispSetFont(disp,4);
     disp->setTextColor(g_themeColor, COL_BG);
     tw = disp->textWidth("xXMayDayXx");
     disp->setCursor((SCREEN_W - tw) / 2, 104);
     disp->print("xXMayDayXx");
 
-    disp->setTextFont(2);
+    dispSetFont(disp,2);
     disp->setTextColor(COL_WHITE, COL_BG);
     tw = disp->textWidth("xXCYD-PokerXx");
     disp->setCursor((SCREEN_W - tw) / 2, 140);
@@ -1062,7 +1106,7 @@ static void showSplash() {
     disp->setCursor((SCREEN_W - tw) / 2, 162);
     disp->print("xXQuantum-SmokeXx");
 
-    disp->setTextFont(1);
+    dispSetFont(disp,1);
     disp->setTextColor(COL_DIM_GRAY, COL_BG);
     tw = disp->textWidth("Loading...");
     disp->setCursor((SCREEN_W - tw) / 2, 200);
@@ -1124,8 +1168,11 @@ void setup() {
     showSplash();
     delay(4000);
 
+#ifndef USE_LOVYAN_GFX
+    // Backlight — LGFX handles this via its PWM light instance
     pinMode(TFT_BL, OUTPUT);
     digitalWrite(TFT_BL, HIGH);
+#endif
 
     redrawAll();
     Serial.println("CYD-Poker ready");
