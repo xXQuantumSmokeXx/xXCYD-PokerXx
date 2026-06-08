@@ -49,7 +49,7 @@ Two poker games for the ESP32-32E and 2USB CYD (Cheap Yellow Display) — classi
 - ILI9341 240×320 TFT (landscape orientation)
 - XPT2046 touch controller
 
-Same pinout as the CYD-Weather project.
+Same pinout as the [CYD-Weather](https://github.com/xXQuantumSmokeXx/xXCYD-Weather-StationXx) project.
 
 ### Credits
 
