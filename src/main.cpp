@@ -71,6 +71,11 @@ static bool readTouch() {
     ty = map(p.x, TOUCH_X_MIN, TOUCH_X_MAX, SCREEN_H - 1, 0);
     tx = constrain(tx, 0, SCREEN_W - 1);
     ty = constrain(ty, 0, SCREEN_H - 1);
+#if CYD_USB_VERSION == 2
+    // 2USB display has MY mirror: both axes need flipping for touch
+    tx = SCREEN_W - 1 - tx;
+    ty = SCREEN_H - 1 - ty;
+#endif
     touched = true;
     if (wasTouched) return false;
     wasTouched = true;
@@ -883,72 +888,55 @@ static void handleSerialCapture() {
 
 // ── Orientation test (2-USB only) ────────────────────────────────────────────
 
-struct RotationMode {
-    const char* name;
-    void (*apply)();
-};
-static int g_rotMode = 0;  // default to standard landscape
+static int  g_rotMode = 0;      // 0-7 LovyanGFX rotation
+static bool g_invertOn = true;   // invert display state
 
 #ifdef USE_LOVYAN_GFX
-  // LovyanGFX natively supports rotations 0-7 — all mirror / flip combos.
-  static void applyRotationN(int n) { tft.setRotation(n); }
-
-  static const RotationMode ROT_MODES[] = {
-      {"Rot 0 Portrait",            []{ applyRotationN(0); }},
-      {"Rot 1 Landscape",           []{ applyRotationN(1); }},
-      {"Rot 2 Portrait 180",        []{ applyRotationN(2); }},
-      {"Rot 3 Landscape 180",       []{ applyRotationN(3); }},
-      {"Rot 4 Portrait Mirror",     []{ applyRotationN(4); }},
-      {"Rot 5 Landscape Mirror",    []{ applyRotationN(5); }},
-      {"Rot 6 Portrait 180 Mirr",   []{ applyRotationN(6); }},
-      {"Rot 7 Landscape 180 Mirr",  []{ applyRotationN(7); }},
+  static const char* ROT_NAMES[] = {
+      "Rot 0 Portrait", "Rot 1 Landscape", "Rot 2 Port 180",
+      "Rot 3 Land 180", "Rot 4 Port Mirr", "Rot 5 Land Mirr",
+      "Rot 6 Port180Mirr", "Rot 7 Land180Mirr",
   };
-  static const int ROT_MODE_COUNT = sizeof(ROT_MODES) / sizeof(ROT_MODES[0]);
+  static const int ROT_COUNT = 8;
+
+  static void applyOrientation() {
+      tft.setRotation(g_rotMode);
+      tft.invertDisplay(g_invertOn);
+  }
 #else
-  static void applyRotation0() { tft.setRotation(1); }
-  static void applyRotation1() { tft.setRotation(3); }
-  static void applyRotation2() {
-      tft.setRotation(1);
-      tft.writecommand(TFT_MADCTL);
-      tft.writedata(TFT_MAD_MX | TFT_MAD_BGR);
-  }
-  static void applyRotation3() {
-      tft.setRotation(1);
-      tft.writecommand(TFT_MADCTL);
-      tft.writedata(TFT_MAD_MY | TFT_MAD_BGR);
-  }
-  static void applyRotation4() {
-      tft.setRotation(1);
-      tft.writecommand(TFT_MADCTL);
-      tft.writedata(TFT_MAD_MX | TFT_MAD_MY | TFT_MAD_BGR);
-  }
-
-  static const RotationMode ROT_MODES[] = {
-      {"Standard Landscape",     applyRotation0},
-      {"Landscape 180",          applyRotation1},
-      {"Landscape + Mirror X",   applyRotation2},
-      {"Landscape + Mirror Y",   applyRotation3},
-      {"Landscape + Manual 180", applyRotation4},
+  static const char* ROT_NAMES[] = {
+      "Standard", "Land 180", "Land+MirX", "Land+MirY", "Manual 180",
   };
-  static const int ROT_MODE_COUNT = sizeof(ROT_MODES) / sizeof(ROT_MODES[0]);
+  static const int ROT_COUNT = 5;
+
+  static void applyOrientation() {
+      switch (g_rotMode) {
+          case 0: tft.setRotation(1); break;
+          case 1: tft.setRotation(3); break;
+          case 2: tft.setRotation(1);
+                  tft.writecommand(TFT_MADCTL);
+                  tft.writedata(TFT_MAD_MX | TFT_MAD_BGR); break;
+          case 3: tft.setRotation(1);
+                  tft.writecommand(TFT_MADCTL);
+                  tft.writedata(TFT_MAD_MY | TFT_MAD_BGR); break;
+          case 4: tft.setRotation(1);
+                  tft.writecommand(TFT_MADCTL);
+                  tft.writedata(TFT_MAD_MX | TFT_MAD_MY | TFT_MAD_BGR); break;
+      }
+      tft.invertDisplay(g_invertOn);
+  }
 #endif
 
-// Button: bottom-center, full width, tap to cycle
-#define ROT_BTN_X  60
-#define ROT_BTN_Y  190
-#define ROT_BTN_W  200
-#define ROT_BTN_H  40
-
-static bool hitRotateButton() {
-    return (tx >= ROT_BTN_X && tx <= ROT_BTN_X + ROT_BTN_W &&
-            ty >= ROT_BTN_Y && ty <= ROT_BTN_Y + ROT_BTN_H);
-}
+// Orientation test: tap LEFT half to rotate, RIGHT half to toggle invert.
+// Uses full-screen halves so touch mapping can't miss.
+static bool hitOrientRotBtn() { return tx < SCREEN_W / 2; }
+static bool hitOrientInvBtn() { return tx >= SCREEN_W / 2; }
 
 static void drawOrientationUI() {
     disp->fillScreen(COL_BG);
-    dispSetFont(disp,2);
 
     // Corner labels
+    dispSetFont(disp,2);
     disp->setTextColor(COL_WHITE, COL_BG);
     disp->setTextDatum(TL_DATUM);  disp->drawString("NW", 2, 2);
     disp->setTextDatum(TR_DATUM);  disp->drawString("NE", SCREEN_W - 2, 2);
@@ -959,32 +947,33 @@ static void drawOrientationUI() {
     disp->drawLine(SCREEN_W/2 - 10, SCREEN_H/2, SCREEN_W/2 + 10, SCREEN_H/2, COL_WHITE);
     disp->drawLine(SCREEN_W/2, SCREEN_H/2 - 10, SCREEN_W/2, SCREEN_H/2 + 10, COL_WHITE);
 
-    // Current mode — above button
+    // Status line
+    dispSetFont(disp,1);
     disp->setTextDatum(BC_DATUM);
     disp->setTextColor(g_themeColor, COL_BG);
-    disp->drawString(ROT_MODES[g_rotMode].name, SCREEN_W/2, ROT_BTN_Y - 10);
-    char buf[16];
-    snprintf(buf, sizeof(buf), "%d/%d", g_rotMode + 1, ROT_MODE_COUNT);
-    dispSetFont(disp,1);
-    disp->drawString(buf, SCREEN_W/2, ROT_BTN_Y - 24);
+    char st[48];
+    snprintf(st, sizeof(st), "%s  |  INVERT:%s", ROT_NAMES[g_rotMode], g_invertOn ? "ON" : "OFF");
+    disp->drawString(st, SCREEN_W/2, SCREEN_H - 30);
 
-    // Tap button
-    disp->fillRoundRect(ROT_BTN_X, ROT_BTN_Y, ROT_BTN_W, ROT_BTN_H, 6, COL_BG);
-    disp->drawRoundRect(ROT_BTN_X, ROT_BTN_Y, ROT_BTN_W, ROT_BTN_H, 6, g_themeColor);
-    disp->drawRoundRect(ROT_BTN_X+1, ROT_BTN_Y+1, ROT_BTN_W-2, ROT_BTN_H-2, 6, g_themeColor);
+    // Left half label
     dispSetFont(disp,2);
-    disp->setTextColor(g_themeColor, COL_BG);
-    disp->setTextDatum(MC_DATUM);
-    disp->drawString("TAP TO ROTATE", SCREEN_W/2, ROT_BTN_Y + ROT_BTN_H/2);
+    disp->setTextColor(COL_DIM_GRAY, COL_BG);
+    disp->setTextDatum(BC_DATUM);
+    disp->drawString("TAP:ROTATE", SCREEN_W/4, SCREEN_H - 10);
 
-    // Confirm area — top-right corner
+    // Right half label
+    disp->drawString("TAP:INVERT", SCREEN_W*3/4, SCREEN_H - 10);
+
+    // Vertical divider
+    disp->drawFastVLine(SCREEN_W/2, SCREEN_H - 40, 40, COL_DIM_GRAY);
+
+    // Confirm hint
     dispSetFont(disp,1);
     disp->setTextColor(COL_DIM_GRAY, COL_BG);
     disp->setTextDatum(TR_DATUM);
     disp->drawString("hold 2s to confirm", SCREEN_W - 2, 2);
 }
 
-// Quick touch read for the orientation test (touch already initialized)
 static bool readTouchQuick() {
     if (!ts.touched()) return false;
     TS_Point p = ts.getPoint();
@@ -996,8 +985,9 @@ static bool readTouchQuick() {
 }
 
 static void runOrientationTest() {
-    g_rotMode = 0;  // start with standard landscape
-    ROT_MODES[g_rotMode].apply();
+    g_rotMode  = 1;   // start with Rot 1 Landscape
+    g_invertOn = true;
+    applyOrientation();
     drawOrientationUI();
 
     unsigned long lastTap = millis();
@@ -1007,38 +997,42 @@ static void runOrientationTest() {
     while (true) {
         bool isTouching = readTouchQuick();
 
-        // Detect tap (touch release)
         if (!isTouching && wasTouching) {
             if (millis() - holdStart < 1000) {
-                // Short tap — cycle to next mode
-                g_rotMode = (g_rotMode + 1) % ROT_MODE_COUNT;
-                ROT_MODES[g_rotMode].apply();
-                drawOrientationUI();
-                lastTap = millis();
+                if (hitOrientRotBtn()) {
+                    g_rotMode = (g_rotMode + 1) % ROT_COUNT;
+                    applyOrientation();
+                    drawOrientationUI();
+                    lastTap = millis();
+                } else if (hitOrientInvBtn()) {
+                    g_invertOn = !g_invertOn;
+                    applyOrientation();
+                    drawOrientationUI();
+                    lastTap = millis();
+                }
             }
             holdStart = 0;
         }
 
-        // Detect hold start
         if (isTouching && !wasTouching) {
             holdStart = millis();
         }
 
-        // Detect long hold (2 seconds) — confirm
+        // Long hold (2s) anywhere confirms current settings
         if (isTouching && holdStart > 0 && millis() - holdStart >= 2000) {
-            // Visual feedback
             disp->fillScreen(COL_BG);
             dispSetFont(disp,2);
             disp->setTextColor(g_themeColor, COL_BG);
             disp->setTextDatum(MC_DATUM);
             disp->drawString("CONFIRMED", SCREEN_W/2, SCREEN_H/2 - 10);
             dispSetFont(disp,1);
-            disp->drawString(ROT_MODES[g_rotMode].name, SCREEN_W/2, SCREEN_H/2 + 12);
+            char st[48];
+            snprintf(st, sizeof(st), "%s INV:%s", ROT_NAMES[g_rotMode], g_invertOn ? "ON" : "OFF");
+            disp->drawString(st, SCREEN_W/2, SCREEN_H/2 + 12);
             delay(1000);
             break;
         }
 
-        // Auto-confirm after 30 seconds of no taps
         if (millis() - lastTap > 30000) break;
 
         wasTouching = isTouching;
@@ -1128,20 +1122,16 @@ void setup() {
     // ── Display rotation ─────────────────────────────────────────────────
     // CYD 2.8" has two hardware revisions:
     //   1-USB (1 USB port):  standard orientation → rotation 1
-    //   2-USB (2 USB ports): LCD physically flipped 180° → rotation 3
+    //   2-USB (2 USB ports): Landscape + Mirror Y, MADCTL = MY|BGR, no invert
     //
-    // Rotation 3 uses MADCTL = MX|MY|MV|BGR (0xE8) — full 180° landscape
-    // without any manual register override, so TFT_eSPI internals stay
-    // consistent with the hardware orientation.
-    //
-    // If the display still looks wrong, watch the corner labels ("NW" "NE"
-    // "SW" "SE") during the 3-second orientation check before the splash:
-    //   - Labels upside down → wrong rotation (try the other one)
-    //   - Labels mirrored   → need MX flip only
-    //   - Labels upside down + mirrored → need MY flip only
+    // Manual MADCTL write preserves the confirmed working orientation.
+    // Colors are correct because TFT_RGB_ORDER=TFT_BGR in build_flags
+    // causes TFT_eSPI to pre-swap R↔B, and the manual BGR bit causes the
+    // ILI9341 to swap them back → double-swap = correct colors.
 #if CYD_USB_VERSION == 2
-    tft.setRotation(3);       // 2-USB: full 180° landscape
-    tft.invertDisplay(true);  // 2-USB: colors are inverted on this variant
+    tft.setRotation(1);           // landscape memory window
+    tft.writecommand(TFT_MADCTL);
+    tft.writedata(TFT_MAD_MY);    // mirror Y only (panel is RGB order)
 #else
     tft.setRotation(1);       // 1-USB: standard landscape
 #endif
@@ -1152,17 +1142,13 @@ void setup() {
     touchSPI.begin(TOUCH_SCLK, TOUCH_MISO, TOUCH_MOSI, TOUCH_CS);
     ts.begin(touchSPI);
 #if CYD_USB_VERSION == 2
-    ts.setRotation(2);   // 2-USB: touch panel also physically 180° rotated
+    ts.setRotation(2);   // 2-USB: 180° touch (match display MY mirror)
 #else
     ts.setRotation(0);   // 1-USB: standard touch orientation
 #endif
 
-#if CYD_USB_VERSION == 2
-    // ── Orientation test — tap to cycle ──────────────────────────────────
-    // Tap the "TAP TO ROTATE" button to cycle through 5 rotation modes.
-    // Hold anywhere for 2 seconds to confirm. Auto-confirms after 30s.
-    runOrientationTest();
-#endif
+    // Orientation test skipped — 2USB config is confirmed correct:
+    // Landscape + Mirror Y, no invert.
 
     // Boot splash
     showSplash();
