@@ -1,6 +1,6 @@
 # xXCYD-PokerXx
 
-Two poker games for the ESP32 Cheap Yellow Display — classic 5-Card Draw Joker Poker and heads-up Texas Hold'em against xXSmokeXx (AI).
+Two poker games for the ESP32-32E CYD (Cheap Yellow Display) — classic 5-Card Draw Joker Poker and heads-up Texas Hold'em against xXSmokeXx (AI).
 
 [![Support on Patreon](https://img.shields.io/badge/Support-Patreon-orange)](https://www.patreon.com/c/xXQuantumSmokeXx)
 
@@ -45,7 +45,7 @@ Two poker games for the ESP32 Cheap Yellow Display — classic 5-Card Draw Joker
 
 ### Hardware
 
-- ESP32 (Cheap Yellow Display — CYD)
+- ESP32-32E (Cheap Yellow Display — CYD)
 - ILI9341 240×320 TFT (landscape orientation)
 - XPT2046 touch controller
 
