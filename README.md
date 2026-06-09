@@ -43,14 +43,6 @@ Two poker games for the ESP32-32E and 2USB CYD (Cheap Yellow Display) — classi
 3. Insert the SD card into your CYD and power it on.
 4. Launch [M5Launcher](https://github.com/bmorcelli/M5Launcher), select the firmware, and flash.
 
-### Hardware
-
-- ESP32-32E and 2USB (Cheap Yellow Display — CYD)
-- ILI9341 240×320 TFT (landscape orientation)
-- XPT2046 touch controller
-
-Same pinout as the [CYD-Weather](https://github.com/xXQuantumSmokeXx/xXCYD-Weather-StationXx) project.
-
 ### Credits
 
 Originally inspired by [Jolly-Card-Poker-CYD](https://github.com/dzulidzan/Jolly-Card-Poker-CYD) by dzulidzan. Completely rewritten with custom card art, theming, and Texas Hold'em mode.
