@@ -131,3 +131,9 @@ static const uint16_t PAYOUTS[] = {1000, 500, 100, 40, 10, 7, 5, 3, 2, 1};
 #define MODE_BTN_W       BTN_W
 #define MODE_BTN_Y       58    // top of right panel, where action button was
 #define MODE_BTN_H       32   // same height as BTN_H
+
+// Hold'em back-to-video-poker button (top-left corner)
+#define HM_BACK_X        4
+#define HM_BACK_Y        1
+#define HM_BACK_W        80
+#define HM_BACK_H        18

@@ -1,4 +1,10 @@
 /**
+ * ── DEPRECATED ──────────────────────────────────────────────────────────────
+ * This is the LEGACY v1 single-file version.  The active code lives under
+ * src/ (main.cpp + cards.h + holdem.cpp + config.h + theme.cpp + lgfx_cyd.h).
+ * Build with PlatformIO (platformio.ini) — NOT this .ino file directly.
+ * ────────────────────────────────────────────────────────────────────────────
+ *
  * ESP32 POKER - UNO POKER port to CYD - work in progress
  * * Features: 
  * - LZSS Bitmap Decompression (Direct to TFT)
@@ -375,11 +381,6 @@ void showBigWin() {
   clearWinBox();
   drawCenterText((const char*)wins[win], ptlx + wbw / 2, 18);
   updatePayout();
-  /* Commented animation - optional highlight of held cards
-  for (int i = 0; i < 5; i++) {
-    drawHoldFrame(i, true);
-    delay(100);
-  }*/
 #ifdef TOUCH
   drawButton(0,"COLLECT",0xFEA0,0x00EF); //0x00EF, 0xFEA0
 #endif
@@ -706,14 +707,3 @@ void writeBytes() {
 void displayLogo(){
   drawLZSSCard(8,128,64);
 }
-
-/*void showBack(int x, int y) {
-  drawCardBorders(x,y);
-  tft.fillRect(x+3,y+3,53,82,0xC0E0);
-}
-void drawCardBorders(int x, int y){
-  tft.drawRect(x+2,y+2,55,84,0xFFFF);
-  tft.drawRect(x+1,y+1,57,86,0xFFFF);
-  tft.drawRect(x,y,60,88,0);
-  tft.drawLine(x+58,y+1,x+58,y+86,0x7BCF);
-}*/

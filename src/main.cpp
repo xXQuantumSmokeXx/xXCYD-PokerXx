@@ -338,26 +338,14 @@ static void drawHoldemScreen() {
 
     drawPowerButton();
 
-    // ── Mode toggle (top-left corner) ──
-    {
-        const char* mlabel = "5-CARD DRAW";
-        int mw = 76, mh = 14, mx = 4, my = 2;
-        disp->fillRoundRect(mx, my, mw, mh, 3, COL_BG);
-        disp->drawRoundRect(mx, my, mw, mh, 3, g_themeColor);
-        dispSetFont(disp,1);
-        disp->setTextColor(g_themeColor, COL_BG);
-        drawCenterText(mx + mw / 2, my + mh / 2, mlabel);
-    }
-
     // ── Back to Video Poker button (top-left) ──
     {
-        int mw = 80, mh = 18, mx = 4, my = 1;
-        disp->fillRoundRect(mx, my, mw, mh, 4, COL_BG);
-        disp->drawRoundRect(mx, my, mw, mh, 4, g_themeColor);
-        disp->drawRoundRect(mx + 1, my + 1, mw - 2, mh - 2, 4, g_themeColor);
+        disp->fillRoundRect(HM_BACK_X, HM_BACK_Y, HM_BACK_W, HM_BACK_H, 4, COL_BG);
+        disp->drawRoundRect(HM_BACK_X, HM_BACK_Y, HM_BACK_W, HM_BACK_H, 4, g_themeColor);
+        disp->drawRoundRect(HM_BACK_X + 1, HM_BACK_Y + 1, HM_BACK_W - 2, HM_BACK_H - 2, 4, g_themeColor);
         dispSetFont(disp,1);
         disp->setTextColor(g_themeColor, COL_BG);
-        drawCenterText(mx + mw / 2, my + mh / 2, "VIDEO POKER");
+        drawCenterText(HM_BACK_X + HM_BACK_W / 2, HM_BACK_Y + HM_BACK_H / 2, "VIDEO POKER");
     }
 
     // ── Positions ──
@@ -1187,7 +1175,8 @@ void loop() {
     // ── Hold'em mode ────────────────────────────────────────────────
     if (gameMode == 1) {
         // VIDEO POKER button works in ALL stages
-        if (tx >= 4 && tx <= 84 && ty >= 1 && ty <= 19) {
+        if (tx >= HM_BACK_X && tx <= HM_BACK_X + HM_BACK_W &&
+            ty >= HM_BACK_Y && ty <= HM_BACK_Y + HM_BACK_H) {
             gameMode = 0;
             credits = g_hm.playerStack;
             saveCredits();

@@ -103,8 +103,9 @@ void holdemNewHand() {
         g_hm.playerStack -= bb;  g_hm.playerBet = bb;
         g_hm.currentBet = bb;
     }
-    // Blinds are in playerBet/aiBet now — move them to pot
-    collectBetsToPot();
+    // Blinds stay in playerBet/aiBet for the preflop betting round.
+    // They will be moved to pot by collectBetsToPot() in holdemNextStage()
+    // when the preflop round ends. This ensures toCall calculations are correct.
 
     // Deal 2 hole cards to each
     g_hm.playerCards[0] = deckToCard(drawCard());
