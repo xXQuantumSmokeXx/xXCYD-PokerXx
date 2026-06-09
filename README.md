@@ -48,3 +48,5 @@ Two poker games for the ESP32-32E and 2USB CYD (Cheap Yellow Display) — classi
 Originally inspired by [Jolly-Card-Poker-CYD](https://github.com/dzulidzan/Jolly-Card-Poker-CYD) by dzulidzan. Completely rewritten with custom card art, theming, and Texas Hold'em mode.
 
 Built by xXQuantum-SmokeXx, with development assistance from Claude Code.
+
+Check out my other project: [xXCYD-WeatherXx](https://github.com/xXQuantumSmokeXx/xXCYD-Weather-StationXx)
