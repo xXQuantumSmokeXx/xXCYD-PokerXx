@@ -63,6 +63,16 @@ static uint8_t  gameMode = 0;      // 0=5-card draw, 1=Texas Hold'em
 
 // ── Touch ──────────────────────────────────────────────────────────────────
 
+static bool s_touchFlipped = false;   // runtime 180° flip, NVS-backed
+
+static void touchSetFlipped(bool flipped) {
+    s_touchFlipped = flipped;
+    { Preferences p; p.begin("cyd-poker", false); p.putInt("touch_cal", flipped ? 1 : 0); p.end(); }
+    ts.setRotation(flipped ? 2 : 0);
+}
+
+static bool touchGetFlipped() { return s_touchFlipped; }
+
 static bool readTouch() {
     bool nowTouched = ts.touched();
     if (!nowTouched) { wasTouched = false; touched = false; return false; }
@@ -1095,6 +1105,68 @@ static void showSplash() {
     disp->print("Loading...");
 }
 
+// ── First-boot touch calibration ──────────────────────────────────────────────
+// Shows a target in the top-left corner. If the user taps it and the reported
+// position lands in the bottom-right (180 opposite), touch needs flipping.
+// Runs once; persisted via NVS key "touch_cal". Serial 'T' can retrigger.
+
+static void touchCalibrate(bool force = false) {
+#if CYD_USB_VERSION == 2
+    if (!force) {
+        Preferences p; p.begin("cyd-poker", true); int cal = p.getInt("touch_cal", 0); p.end();
+        if (cal != 0) return;
+    }
+
+    // Backlight on
+    pinMode(TFT_BL, OUTPUT);
+    digitalWrite(TFT_BL, HIGH);
+
+    tft.fillScreen(COL_BG);
+
+    // Draw target box in top-left
+    const int TX = 20, TY = 38, TW = 80, TH = 50;
+    tft.fillRect(TX, TY, TW, TH, g_themeColor);
+    dispSetFont(disp, 4);
+    tft.setTextColor(COL_BG, g_themeColor);
+    tft.setCursor(TX + 8, TY + TH / 2 - 8);
+    tft.print("TAP");
+
+    // Instructions at screen center — invariant under 180 rotation
+    {
+        dispSetFont(disp, 4);
+        tft.setTextColor(COL_WHITE, COL_BG);
+        const char *msg = "Tap the box above";
+        int tw = tft.textWidth(msg);
+        tft.setCursor((SCREEN_W - tw) / 2, SCREEN_H / 2 - 20);
+        tft.print(msg);
+
+        dispSetFont(disp, 2);
+        tft.setTextColor(COL_DIM_GRAY, COL_BG);
+        msg = "(or wait 15s for default)";
+        tw = tft.textWidth(msg);
+        tft.setCursor((SCREEN_W - tw) / 2, SCREEN_H / 2);
+        tft.print(msg);
+    }
+
+    // Poll for a single tap
+    unsigned long start = millis();
+    while (millis() - start < 15000) {
+        if (readTouch()) {
+            // If the user tapped the visible target (top-left) but the
+            // touch reports bottom-right coords, the digitizer is 180 off.
+            // Target: x=20..100, y=38..88  -> 180-rotated: x=220..300, y=152..202
+            if (tx >= 220 && tx <= 300 && ty >= 152 && ty <= 202) {
+                touchSetFlipped(!s_touchFlipped);
+            }
+            break;
+        }
+        delay(20);
+    }
+
+    { Preferences p; p.begin("cyd-poker", false); p.putInt("touch_cal", 1); p.end(); }
+#endif
+}
+
 // ── Setup ──────────────────────────────────────────────────────────────────
 
 void setup() {
@@ -1126,17 +1198,26 @@ void setup() {
 
     tft.fillScreen(COL_BG);
 
-    // Init touch early so the orientation test can use it
+    // Init touch early so calibration can use it
     touchSPI.begin(TOUCH_SCLK, TOUCH_MISO, TOUCH_MOSI, TOUCH_CS);
     ts.begin(touchSPI);
 #if CYD_USB_VERSION == 2
-    ts.setRotation(2);   // 2-USB: 180° touch (match display MY mirror)
+    // 2USB boards have two touch-digitizer orientations. Load saved flip
+    // state from NVS; default to flipped (rotation 2) which works on most boards.
+    {
+        Preferences p; p.begin("cyd-poker", true);
+        s_touchFlipped = p.getInt("touch_cal", 0) != 0;
+        // Fallback: if "touch_cal" not set, check older "touch_flip" key
+        if (!s_touchFlipped) s_touchFlipped = p.getInt("touch_flip", 1) != 0;
+        p.end();
+    }
+    ts.setRotation(s_touchFlipped ? 2 : 0);
 #else
     ts.setRotation(0);   // 1-USB: standard touch orientation
 #endif
 
-    // Orientation test skipped — 2USB config is confirmed correct:
-    // Landscape + Mirror Y, no invert.
+    // First-boot calibration — only on 2USB, only once
+    touchCalibrate();
 
     // Boot splash
     showSplash();
@@ -1160,6 +1241,14 @@ void loop() {
         int cmd = Serial.read();
         if (cmd == 'R' || cmd == 'r') Serial.println("READY");
         else if (cmd == 'S' || cmd == 's') handleSerialCapture();
+        else if (cmd == 'T' || cmd == 't') {
+#if CYD_USB_VERSION == 2
+            touchCalibrate(true);
+#endif
+            Serial.print("TOUCH:");
+            Serial.println(s_touchFlipped ? "FLIPPED" : "NORMAL");
+            redrawAll();
+        }
         else if (cmd >= '0' && cmd <= '9') redrawAll();
     }
 
