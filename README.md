@@ -36,12 +36,37 @@ Two poker games for the ESP32-32E and 2USB CYD (Cheap Yellow Display) — classi
 - Serial screenshot capture via RGB332 protocol (compatible with xXCYD-ScreenCaptureXx)
 - Custom geometric card art — all drawn with TFT_eSPI primitives, no bitmaps
 
-### Setup (M5Launcher)
+### Setup
 
-1. Download the correct firmware from the [Releases](https://github.com/xXQuantumSmokeXx/xXCYD-PokerXx/releases) page.
-2. Copy the `.bin` file onto a micro SD card (FAT32).
-3. Insert the SD card into your CYD and power it on.
-4. Launch [M5Launcher](https://github.com/bmorcelli/M5Launcher), select the firmware, and flash.
+| Board | Firmware File |
+|-------|--------------|
+| **ESP32-32E** (1-USB) | `merged-firmware-cyd_poker.bin` |
+| **2USB** (2 USB ports) | `merged-firmware-cyd_poker_2usb.bin` |
+
+These are **merged flash images** — bootloader + partition table + application firmware combined into a single file. Flash at offset `0x00` with any ESP32 tool (esptool, ESP32 Flash Download Tool, BinForge, etc.).
+
+**Direct flash:**
+```bash
+esptool.py --chip esp32 write_flash 0x0 merged-firmware-cyd_poker.bin
+```
+
+**Or via M5Launcher:** copy the `.bin` file onto a micro SD card (FAT32), insert into your CYD, launch [M5Launcher](https://github.com/bmorcelli/M5Launcher), select the firmware, and flash.
+
+### Build
+
+Build from source with PlatformIO:
+
+```bash
+# ESP32-32E (1-USB)
+pio run --environment cyd_poker
+
+# 2USB
+pio run --environment cyd_poker_2usb
+```
+
+After a successful build, merged flashable images are auto-generated at the project root (`merged-firmware-*.bin`). No manual esptool merging needed.
+
+Alternate display driver builds are also available for ST7789 and LovyanGFX 2USB boards — see `platformio.ini` for those environments.
 
 ### Credits
 

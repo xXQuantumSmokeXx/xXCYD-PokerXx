@@ -2,4 +2,4 @@
 .pioenvs/
 .piolibdeps/
 .vscode/
-*.bin
+firmware.bin
