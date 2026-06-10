@@ -983,14 +983,18 @@ static bool readTouchQuick() {
 }
 
 static void runOrientationTest() {
-    g_rotMode  = 1;   // start with Rot 1 Landscape
-    g_invertOn = true;
+    // Load saved orientation or start with default (landscape, invert on)
+    { Preferences p; p.begin("cyd-poker", true);
+      g_rotMode  = p.getInt("rot_mode", 1);
+      g_invertOn = p.getInt("rot_inv", 1) != 0;
+      p.end(); }
     applyOrientation();
     drawOrientationUI();
 
     unsigned long lastTap = millis();
     unsigned long holdStart = 0;
     bool wasTouching = false;
+    bool confirmed = false;
 
     while (true) {
         bool isTouching = readTouchQuick();
@@ -1027,6 +1031,13 @@ static void runOrientationTest() {
             char st[48];
             snprintf(st, sizeof(st), "%s INV:%s", ROT_NAMES[g_rotMode], g_invertOn ? "ON" : "OFF");
             disp->drawString(st, SCREEN_W/2, SCREEN_H/2 + 12);
+            // Save to NVS
+            { Preferences p; p.begin("cyd-poker", false);
+              p.putInt("rot_mode", g_rotMode);
+              p.putInt("rot_inv", g_invertOn ? 1 : 0);
+              p.putInt("rot_cal", 1);
+              p.end(); }
+            confirmed = true;
             delay(1000);
             break;
         }
@@ -1036,6 +1047,25 @@ static void runOrientationTest() {
         wasTouching = isTouching;
         delay(20);
     }
+
+    // If confirmed, stay with new settings. Otherwise revert to saved.
+    if (!confirmed) {
+        { Preferences p; p.begin("cyd-poker", true);
+          g_rotMode  = p.getInt("rot_mode", 1);
+          g_invertOn = p.getInt("rot_inv", 1) != 0;
+          p.end(); }
+        applyOrientation();
+    }
+}
+
+// First-boot gate — only runs once on 2USB, skips if already calibrated
+static void rotationCalibrate() {
+#if CYD_USB_VERSION == 2
+    { Preferences p; p.begin("cyd-poker", true);
+      int cal = p.getInt("rot_cal", 0); p.end();
+      if (cal != 0) return; }
+    runOrientationTest();
+#endif
 }
 
 // ── Boot splash ────────────────────────────────────────────────────────────
@@ -1180,20 +1210,16 @@ void setup() {
     tft.init();
 
     // ── Display rotation ─────────────────────────────────────────────────
-    // CYD 2.8" has two hardware revisions:
-    //   1-USB (1 USB port):  standard orientation → rotation 1
-    //   2-USB (2 USB ports): Landscape + Mirror Y, MADCTL = MY|BGR, no invert
-    //
-    // Manual MADCTL write preserves the confirmed working orientation.
-    // Colors are correct because TFT_RGB_ORDER=TFT_BGR in build_flags
-    // causes TFT_eSPI to pre-swap R↔B, and the manual BGR bit causes the
-    // ILI9341 to swap them back → double-swap = correct colors.
+    // ESP32-32E (1-USB): standard landscape → rotation 1
+    // 2-USB: NVS-backed orientation (calibrated on first boot)
 #if CYD_USB_VERSION == 2
-    tft.setRotation(1);           // landscape memory window
-    tft.writecommand(TFT_MADCTL);
-    tft.writedata(TFT_MAD_MY);    // mirror Y only (panel is RGB order)
+    { Preferences p; p.begin("cyd-poker", true);
+      g_rotMode  = p.getInt("rot_mode", 1);
+      g_invertOn = p.getInt("rot_inv", 1) != 0;
+      p.end(); }
+    applyOrientation();
 #else
-    tft.setRotation(1);       // 1-USB: standard landscape
+    tft.setRotation(1);
 #endif
 
     tft.fillScreen(COL_BG);
@@ -1216,7 +1242,8 @@ void setup() {
     ts.setRotation(0);   // 1-USB: standard touch orientation
 #endif
 
-    // First-boot calibration — only on 2USB, only once
+    // First-boot calibrations — only on 2USB, only once each
+    rotationCalibrate();
     touchCalibrate();
 
     // Boot splash
