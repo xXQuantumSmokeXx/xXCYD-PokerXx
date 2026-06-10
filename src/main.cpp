@@ -1241,14 +1241,6 @@ void loop() {
         int cmd = Serial.read();
         if (cmd == 'R' || cmd == 'r') Serial.println("READY");
         else if (cmd == 'S' || cmd == 's') handleSerialCapture();
-        else if (cmd == 'T' || cmd == 't') {
-#if CYD_USB_VERSION == 2
-            touchCalibrate(true);
-#endif
-            Serial.print("TOUCH:");
-            Serial.println(s_touchFlipped ? "FLIPPED" : "NORMAL");
-            redrawAll();
-        }
         else if (cmd >= '0' && cmd <= '9') redrawAll();
     }
 
