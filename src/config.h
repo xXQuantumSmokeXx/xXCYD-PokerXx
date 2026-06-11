@@ -83,6 +83,7 @@
 #define PWR_BTN_X       306
 #define PWR_BTN_Y       10
 #define PWR_BTN_R       7
+
 #define CARD_W          56
 #define CARD_H          82
 #define CARD_GAP        62
@@ -101,6 +102,7 @@
 #define COL_MID_GRAY    0x8410
 #define COL_DIM_GRAY    0x4208
 #define COL_HOLD_AMBER  0xA124
+#define COL_AMBER       0xFD40u   // calibration cursor / reference markers
 #define COL_WIN_BG      0xE000
 
 // ── Paytable ──────────────────────────────────────────────────────────────
