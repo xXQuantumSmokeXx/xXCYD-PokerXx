@@ -62,8 +62,9 @@ struct HoldemState {
     unsigned long currentBet;     // the bet to match (0 if no raise yet)
     bool     bettingRoundDone;    // both players have acted
 
-    // Last action (for displaying what happened)
-    char     lastAction[32];
+    // Last actions (for displaying what happened)
+    char     lastAction[32];       // final result / player action
+    char     aiLastAction[32];     // what the AI did (fold/raise/call + amount)
 };
 
 extern HoldemState g_hm;

@@ -1,8 +1,14 @@
 # xXCYD-PokerXx
 
-Two poker games for the ESP32-32E and 2USB CYD (Cheap Yellow Display) — classic 5-Card Draw Joker Poker and heads-up Texas Hold'em against xXSmokeXx (AI).
+Two poker games for the ESP32-32E (1-USB) and 2USB CYD (Cheap Yellow Display) — classic 5-Card Draw Joker Poker and heads-up Texas Hold'em against xXSmokeXx (AI).
 
 [![Support on Patreon](https://img.shields.io/badge/Support-Patreon-orange)](https://www.patreon.com/c/xXQuantumSmokeXx)
+
+## Version 1.1.0
+
+Universal 2-USB compatibility release — calibration system ported from [xXCYD-WeatherXx](https://github.com/xXQuantumSmokeXx/xXCYD-Weather-StationXx) v1.1.8.
+
+Both 1USB and 2USB firmware use **TFT_eSPI ILI9341** — the same proven driver as CYD-Weather. On first boot, interactive calibration screens let you match your panel's display and touch orientation — identical to the CYD-Weather v1.1.8 calibration flow.
 
 ## Screens
 
@@ -34,23 +40,34 @@ Two poker games for the ESP32-32E and 2USB CYD (Cheap Yellow Display) — classi
 - RESET button in Hold'em — reset all scores to defaults
 - Mode toggle button switches between Video Poker and Texas Hold'em
 - Serial screenshot capture via RGB332 protocol (compatible with xXCYD-ScreenCaptureXx)
-- Custom geometric card art — all drawn with TFT_eSPI primitives, no bitmaps
+- Custom geometric card art — all drawn with TFT_eSPI/LovyanGFX primitives, no bitmaps
 
 ### Setup
 
 | Board | Firmware File |
 |-------|--------------|
-| **ESP32-32E** (1-USB) | `merged-firmware-cyd_poker.bin` |
-| **2USB** (2 USB ports) | `merged-firmware-cyd_poker_2usb.bin` |
+| **ESP32-32E** (1-USB) | `CYD-Poker-1usb.bin` |
+| **2USB** (all variants) | `CYD-Poker-2usb.bin` |
 
 These are **merged flash images** — bootloader + partition table + application firmware combined into a single file. Flash at offset `0x00` with any ESP32 tool (esptool, ESP32 Flash Download Tool, BinForge, etc.).
 
 **Direct flash:**
 ```bash
-esptool.py --chip esp32 write_flash 0x0 merged-firmware-cyd_poker.bin
+esptool.py --chip esp32 write_flash 0x0 CYD-Poker-1usb.bin
+esptool.py --chip esp32 write_flash 0x0 CYD-Poker-2usb.bin
 ```
 
 **Or via M5Launcher:** copy the `.bin` file onto a micro SD card (FAT32), insert into your CYD, launch [M5Launcher](https://github.com/bmorcelli/M5Launcher), select the firmware, and flash.
+
+### First Boot (2USB)
+
+On first boot, two calibration screens appear:
+
+1. **Display calibration** — an asymmetric reference pattern (amber triangle, colored bracket, ring, crosshair, "T"). Tap to cycle through 8 display rotations. When the pattern looks correct, hold 2 seconds to confirm.
+
+2. **Touch calibration** — corner crosshair targets with a live amber cursor that follows your finger. Tap to cycle through 4 touch-digitizer rotations. When the cursor accurately follows your finger, hold 2 seconds to confirm.
+
+Calibration runs once and persists in NVS. To re-run it, send `M` (display) or `T` (touch) via serial, or clear NVS.
 
 ### Build
 
@@ -60,18 +77,16 @@ Build from source with PlatformIO:
 # ESP32-32E (1-USB)
 pio run --environment cyd_poker
 
-# 2USB
+# 2USB (all variants — LovyanGFX auto-detect)
 pio run --environment cyd_poker_2usb
 ```
 
-After a successful build, merged flashable images are auto-generated at the project root (`merged-firmware-*.bin`). No manual esptool merging needed.
-
-Alternate display driver builds are also available for ST7789 and LovyanGFX 2USB boards — see `platformio.ini` for those environments.
+After a successful build, merged flashable images (`CYD-Poker-1usb.bin` / `CYD-Poker-2usb.bin`) are auto-generated at the project root.
 
 ### Credits
 
 Originally inspired by [Jolly-Card-Poker-CYD](https://github.com/dzulidzan/Jolly-Card-Poker-CYD) by dzulidzan. Completely rewritten with custom card art, theming, and Texas Hold'em mode.
 
-Built by xXQuantum-SmokeXx, with development assistance from Claude Code.
+Calibration system ported from [xXCYD-WeatherXx](https://github.com/xXQuantumSmokeXx/xXCYD-Weather-StationXx).
 
-Check out my other project: [xXCYD-WeatherXx](https://github.com/xXQuantumSmokeXx/xXCYD-Weather-StationXx)
+Built by xXQuantum-SmokeXx, with development assistance from Claude Code.

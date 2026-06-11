@@ -74,6 +74,7 @@ void holdemNewHand() {
     g_hm.pot               = 0;
     g_hm.bettingRoundDone  = false;
     g_hm.lastAction[0]     = 0;
+    g_hm.aiLastAction[0]   = 0;
 
     // Rebuy for broke players
     if (g_hm.playerStack < HOLDEM_BB) {
@@ -165,11 +166,14 @@ void holdemAIAct() {
             g_hm.aiBet = raise;
             g_hm.currentBet = raise;
             g_hm.playerActed = false;
-            snprintf(g_hm.lastAction, sizeof(g_hm.lastAction), "xXSmokeXx raises!");
+            snprintf(g_hm.aiLastAction, sizeof(g_hm.aiLastAction), "raises to %lu", raise);
         } else {
             g_hm.aiStack -= toCall;
             g_hm.aiBet += toCall;
-            snprintf(g_hm.lastAction, sizeof(g_hm.lastAction), "xXSmokeXx calls");
+            if (toCall > 0)
+                snprintf(g_hm.aiLastAction, sizeof(g_hm.aiLastAction), "calls %lu", toCall);
+            else
+                snprintf(g_hm.aiLastAction, sizeof(g_hm.aiLastAction), "checks");
         }
     } else if (mediumHand) {
         // Call 70%, raise 20%, fold 10%
@@ -177,8 +181,10 @@ void holdemAIAct() {
             if (toCall > 0) {
                 g_hm.aiStack -= toCall;
                 g_hm.aiBet += toCall;
+                snprintf(g_hm.aiLastAction, sizeof(g_hm.aiLastAction), "calls %lu", toCall);
+            } else {
+                snprintf(g_hm.aiLastAction, sizeof(g_hm.aiLastAction), "checks");
             }
-            snprintf(g_hm.lastAction, sizeof(g_hm.lastAction), "xXSmokeXx calls");
         } else if (rng < 90 && g_hm.aiStack > g_hm.currentBet * 2) {
             unsigned long raise = g_hm.currentBet * 2;
             if (raise > g_hm.aiStack) raise = g_hm.aiStack;
@@ -186,22 +192,24 @@ void holdemAIAct() {
             g_hm.aiBet = raise;
             g_hm.currentBet = raise;
             g_hm.playerActed = false;
-            snprintf(g_hm.lastAction, sizeof(g_hm.lastAction), "xXSmokeXx raises!");
+            snprintf(g_hm.aiLastAction, sizeof(g_hm.aiLastAction), "raises to %lu", raise);
         } else {
             g_hm.aiFolded = true;
-            snprintf(g_hm.lastAction, sizeof(g_hm.lastAction), "xXSmokeXx folds!");
+            snprintf(g_hm.aiLastAction, sizeof(g_hm.aiLastAction), "folds");
         }
     } else {
         // Weak hand: fold 50%, call/bluff 50%
         if (rng < 50 && toCall > 0) {
             g_hm.aiFolded = true;
-            snprintf(g_hm.lastAction, sizeof(g_hm.lastAction), "xXSmokeXx folds!");
+            snprintf(g_hm.aiLastAction, sizeof(g_hm.aiLastAction), "folds");
         } else {
             if (toCall > 0) {
                 g_hm.aiStack -= toCall;
                 g_hm.aiBet += toCall;
+                snprintf(g_hm.aiLastAction, sizeof(g_hm.aiLastAction), "calls %lu", toCall);
+            } else {
+                snprintf(g_hm.aiLastAction, sizeof(g_hm.aiLastAction), "checks");
             }
-            snprintf(g_hm.lastAction, sizeof(g_hm.lastAction), "xXSmokeXx calls");
         }
     }
 }
@@ -371,16 +379,16 @@ void holdemDetermineWinner() {
     g_hm.communityRevealed = 5;  // show all community cards
 
     if (g_hm.playerFolded) {
-        // AI wins
+        // AI wins by fold
         g_hm.aiStack += g_hm.pot;
-        snprintf(g_hm.lastAction, sizeof(g_hm.lastAction), "xXSmokeXx wins %lu!", g_hm.pot);
+        snprintf(g_hm.lastAction, sizeof(g_hm.lastAction), "You folded - Smoke wins %lu", g_hm.pot);
         g_hm.pot = 0;
         return;
     }
     if (g_hm.aiFolded) {
-        // Player wins
+        // Player wins by fold
         g_hm.playerStack += g_hm.pot;
-        snprintf(g_hm.lastAction, sizeof(g_hm.lastAction), "You win %lu!", g_hm.pot);
+        snprintf(g_hm.lastAction, sizeof(g_hm.lastAction), "Smoke folded - You win %lu!", g_hm.pot);
         g_hm.pot = 0;
         return;
     }

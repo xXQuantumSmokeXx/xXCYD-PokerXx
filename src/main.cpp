@@ -4,37 +4,11 @@
  */
 
 #include <Arduino.h>
-
-#ifdef USE_LOVYAN_GFX
-  #include "lgfx_cyd.h"
-  typedef LGFX_CYD          GfxDisplay;
-  typedef lgfx::LGFX_Sprite GfxSprite;
-  static LGFX_CYD             tft;
-  static lgfx::LovyanGFX     *disp = &tft;  // LGFX_Base* — shared by Device & Sprite
-#else
-  #include <TFT_eSPI.h>
-  typedef TFT_eSPI    GfxDisplay;
-  typedef TFT_eSprite GfxSprite;
-  static TFT_eSPI     tft;
-  static TFT_eSPI    *disp = &tft;
-#endif
-
-// setTextFont compatibility — LGFX base class lacks setTextFont(uint8_t),
-// so we route through this helper in both builds for consistency.
-#ifdef USE_LOVYAN_GFX
-  static void dispSetFont(lgfx::LovyanGFX *d, uint8_t n) {
-      static const lgfx::IFont* const tbl[] = {
-          &lgfx::fonts::Font0, &lgfx::fonts::Font0,  // 0,1 → GLCD
-          &lgfx::fonts::Font2, nullptr,                // 2 → 16 px
-          &lgfx::fonts::Font4, nullptr, nullptr, nullptr,
-      };
-      if (n < 8 && tbl[n]) d->setFont(tbl[n]);
-  }
-#else
-  static void dispSetFont(TFT_eSPI *d, uint8_t n) { d->setTextFont(n); }
-#endif
-
+#include <TFT_eSPI.h>
 #include <SPI.h>
+
+static TFT_eSPI     tft;
+static TFT_eSPI    *disp = &tft;  // drawing target — normally &tft, swapped to sprite for capture
 #include <XPT2046_Touchscreen.h>
 #include <Preferences.h>
 #include "config.h"
@@ -61,36 +35,68 @@ static uint8_t  dice = 0;
 static uint8_t  gameMode = 0;      // 0=5-card draw, 1=Texas Hold'em
 
 
-// ── Touch ──────────────────────────────────────────────────────────────────
+// ── NVS convenience wrappers ────────────────────────────────────────────────
 
-static bool s_touchFlipped = false;   // runtime 180° flip, NVS-backed
-
-static void touchSetFlipped(bool flipped) {
-    s_touchFlipped = flipped;
-    { Preferences p; p.begin("cyd-poker", false); p.putInt("touch_cal", flipped ? 1 : 0); p.end(); }
-    ts.setRotation(flipped ? 2 : 0);
+static int32_t nvsGetInt(const char *key, int32_t def) {
+    Preferences p; p.begin("cyd-poker", true);
+    int32_t v = p.getInt(key, def); p.end();
+    return v;
+}
+static void nvsPutInt(const char *key, int32_t val) {
+    Preferences p; p.begin("cyd-poker", false);
+    p.putInt(key, val); p.end();
 }
 
-static bool touchGetFlipped() { return s_touchFlipped; }
+// ── Touch ──────────────────────────────────────────────────────────────────
 
-static bool readTouch() {
-    bool nowTouched = ts.touched();
-    if (!nowTouched) { wasTouched = false; touched = false; return false; }
+static int s_touchRotation = 2;   // 0-3, NVS-backed; default 2 (180°) for 2USB
+
+// Raw coordinate translation: XPT2046 raw → screen pixels
+static bool rawToScreen(int16_t *sx, int16_t *sy) {
+    if (!ts.touched()) return false;
     TS_Point p = ts.getPoint();
-    tx = map(p.y, TOUCH_Y_MIN, TOUCH_Y_MAX, 0, SCREEN_W - 1);
-    ty = map(p.x, TOUCH_X_MIN, TOUCH_X_MAX, SCREEN_H - 1, 0);
-    tx = constrain(tx, 0, SCREEN_W - 1);
-    ty = constrain(ty, 0, SCREEN_H - 1);
+    *sx = map(p.y, TOUCH_Y_MIN, TOUCH_Y_MAX, 0, SCREEN_W - 1);
+    *sy = map(p.x, TOUCH_X_MIN, TOUCH_X_MAX, SCREEN_H - 1, 0);
 #if CYD_USB_VERSION == 2
     // 2USB display has MY mirror: both axes need flipping for touch
-    tx = SCREEN_W - 1 - tx;
-    ty = SCREEN_H - 1 - ty;
+    *sx = SCREEN_W - 1 - *sx;
+    *sy = SCREEN_H - 1 - *sy;
 #endif
+    *sx = constrain(*sx, 0, SCREEN_W - 1);
+    *sy = constrain(*sy, 0, SCREEN_H - 1);
+    return true;
+}
+
+// Edge-triggered read — for game button detection (rising edge only)
+static bool readTouch() {
+    int16_t rx, ry;
+    bool nowTouched = rawToScreen(&rx, &ry);
+    if (!nowTouched) { wasTouched = false; touched = false; return false; }
+    tx = rx; ty = ry;
     touched = true;
     if (wasTouched) return false;
     wasTouched = true;
     return true;
 }
+
+// Level-triggered read — for calibration live cursor polling
+static bool touchIsHeld(int16_t *ox = nullptr, int16_t *oy = nullptr) {
+    int16_t rx, ry;
+    bool t = rawToScreen(&rx, &ry);
+    if (t) {
+        if (ox) *ox = rx;
+        if (oy) *oy = ry;
+    }
+    return t;
+}
+
+static void touchSetRotation(int rotation) {
+    s_touchRotation = rotation & 3;
+    nvsPutInt("touch_rot", s_touchRotation);
+    ts.setRotation(s_touchRotation);
+}
+
+static int touchGetRotation() { return s_touchRotation; }
 
 // ── Credit persistence ─────────────────────────────────────────────────────
 
@@ -130,7 +136,7 @@ static void goToSleep() {
     saveCredits();
     // Show sleep message briefly
     disp->fillScreen(COL_BG);
-    dispSetFont(disp,2);
+    disp->setTextFont(2);
     disp->setTextColor(g_themeColor, COL_BG);
     disp->setTextDatum(MC_DATUM);
     disp->drawString("SLEEP", SCREEN_W / 2, SCREEN_H / 2);
@@ -158,7 +164,7 @@ static void drawCenterText(int x, int y, const char* s) {
 // ── Paytable ───────────────────────────────────────────────────────────────
 
 static void drawPayTable() {
-    dispSetFont(disp,1);
+    disp->setTextFont(1);
 
     for (int i = 0; i < 10; i++) {
         int rowY = PT_Y + i * PT_LINE_H;
@@ -180,12 +186,12 @@ static void drawPayTable() {
 
 static void drawCredits() {
     disp->fillRect(RIGHT_X, 2, RIGHT_W, 54, COL_BG);
-    dispSetFont(disp,1);
+    disp->setTextFont(1);
     disp->setTextColor(g_themeColor, COL_BG);
     disp->setTextDatum(TC_DATUM);
     disp->drawString("CREDITS", CREDITS_CX, 4);
     disp->drawString(g_themes[g_themeIdx].name, CREDITS_CX, 14);
-    dispSetFont(disp,4);
+    disp->setTextFont(4);
     disp->setTextColor(g_themeColor, COL_BG);
     char buf[12];
     snprintf(buf, sizeof(buf), "%lu", credits);
@@ -201,7 +207,7 @@ static void drawActionButton(const char* label) {
     disp->fillRoundRect(BTN_X, BTN_Y, BTN_W, BTN_H, 5, COL_BG);
     disp->drawRoundRect(BTN_X, BTN_Y, BTN_W, BTN_H, 5, g_themeColor);
     disp->drawRoundRect(BTN_X + 1, BTN_Y + 1, BTN_W - 2, BTN_H - 2, 5, g_themeColor);
-    dispSetFont(disp,2);
+    disp->setTextFont(2);
     disp->setTextColor(g_themeColor, COL_BG);
     drawCenterText(BTN_X + BTN_W / 2, BTN_Y + BTN_H / 2, label);
 }
@@ -221,7 +227,7 @@ static void drawGambleButtons() {
         disp->fillRoundRect(GMBL_X, by, GMBL_W, GMBL_H, 4, COL_BG);
         disp->drawRoundRect(GMBL_X, by, GMBL_W, GMBL_H, 4, g_themeColor);
         disp->drawRoundRect(GMBL_X + 1, by + 1, GMBL_W - 2, GMBL_H - 2, 4, g_themeColor);
-        dispSetFont(disp,2);
+        disp->setTextFont(2);
         disp->setTextColor(g_themeColor, COL_BG);
         drawCenterText(GMBL_X + GMBL_W / 2, by + GMBL_H / 2, labels[i]);
     }
@@ -240,7 +246,7 @@ static int hitGambleButton() {
 
 static void drawMessage(const char* msg, uint16_t col) {
     disp->fillRect(0, MSG_Y, SCREEN_W, MSG_H, COL_BG);
-    dispSetFont(disp,2);
+    disp->setTextFont(2);
     disp->setTextColor(col, COL_BG);
     drawCenterText(SCREEN_W / 2, MSG_Y + MSG_H / 2, msg);
 }
@@ -253,7 +259,7 @@ static void clearWinBox() {
 }
 
 static void updatePayout() {
-    dispSetFont(disp,4);
+    disp->setTextFont(4);
     disp->setTextColor(COL_WHITE, COL_WIN_BG);
     disp->setTextDatum(MC_DATUM);
     char buf[12];
@@ -264,7 +270,7 @@ static void updatePayout() {
 static void highlightWin(uint16_t col) {
     if (win < 0) return;
     int rowY = PT_Y + win * PT_LINE_H;
-    dispSetFont(disp,1);
+    disp->setTextFont(1);
     disp->setTextDatum(TL_DATUM);
     disp->setTextColor(col, COL_BG);
     disp->drawString(WIN_NAMES[win], PT_X + 2, rowY + 1);
@@ -289,7 +295,7 @@ static void drawModeToggle() {
     disp->fillRoundRect(MODE_BTN_X, MODE_BTN_Y, MODE_BTN_W, MODE_BTN_H, 5, COL_BG);
     disp->drawRoundRect(MODE_BTN_X, MODE_BTN_Y, MODE_BTN_W, MODE_BTN_H, 5, g_themeColor);
     disp->drawRoundRect(MODE_BTN_X + 1, MODE_BTN_Y + 1, MODE_BTN_W - 2, MODE_BTN_H - 2, 5, g_themeColor);
-    dispSetFont(disp,1);
+    disp->setTextFont(1);
     disp->setTextColor(g_themeColor, COL_BG);
     drawCenterText(MODE_BTN_X + MODE_BTN_W / 2, MODE_BTN_Y + MODE_BTN_H / 2, label);
 }
@@ -311,7 +317,7 @@ static void drawSmallCardFace(int x, int y, uint8_t card) {
     disp->drawRoundRect(x, y, HCARD_W, HCARD_H, 4, col);
 
     if (rank == 0) {
-        dispSetFont(disp,1);
+        disp->setTextFont(1);
         disp->setTextColor(g_themeColor, fill);
         disp->setTextDatum(MC_DATUM);
         disp->drawString("J", x + HCARD_W/2, y + HCARD_H/2);
@@ -319,7 +325,7 @@ static void drawSmallCardFace(int x, int y, uint8_t card) {
     }
 
     // Corner rank (top-left)
-    dispSetFont(disp,1);
+    disp->setTextFont(1);
     disp->setTextColor(col, fill);
     disp->setTextDatum(TL_DATUM);
     disp->drawString(rankStr(rank), x + 3, y + 2);
@@ -329,7 +335,7 @@ static void drawSmallCardFace(int x, int y, uint8_t card) {
     disp->drawString(rankStr(rank), x + HCARD_W - 3, y + HCARD_H - 2);
 
     // Center suit
-    drawSuitSymbol(*disp, x + HCARD_W/2, y + HCARD_H/2 + 2, 12, suit);
+    drawSuitSymbol(tft, x + HCARD_W/2, y + HCARD_H/2 + 2, 12, suit);
 }
 
 static void drawSmallCardBack(int x, int y) {
@@ -353,7 +359,7 @@ static void drawHoldemScreen() {
         disp->fillRoundRect(HM_BACK_X, HM_BACK_Y, HM_BACK_W, HM_BACK_H, 4, COL_BG);
         disp->drawRoundRect(HM_BACK_X, HM_BACK_Y, HM_BACK_W, HM_BACK_H, 4, g_themeColor);
         disp->drawRoundRect(HM_BACK_X + 1, HM_BACK_Y + 1, HM_BACK_W - 2, HM_BACK_H - 2, 4, g_themeColor);
-        dispSetFont(disp,1);
+        disp->setTextFont(1);
         disp->setTextColor(g_themeColor, COL_BG);
         drawCenterText(HM_BACK_X + HM_BACK_W / 2, HM_BACK_Y + HM_BACK_H / 2, "VIDEO POKER");
     }
@@ -370,7 +376,7 @@ static void drawHoldemScreen() {
 
     // ── AI cards + info (top-left) ──
     if (g_hm.stage >= HM_PREFLOP) {
-        dispSetFont(disp,1);
+        disp->setTextFont(1);
         disp->setTextDatum(TL_DATUM);
 
         // Name + stack
@@ -384,9 +390,10 @@ static void drawHoldemScreen() {
             disp->drawString(holdemAIStatus(), 4, aiY + 36);
         }
 
-        // Last action (show during play AND hand over)
-        if (g_hm.lastAction[0]) {
-            disp->drawString(g_hm.lastAction, 4, aiY + 48);
+        // AI last action (fold/raise/call + amounts)
+        if (g_hm.aiLastAction[0]) {
+            disp->setTextColor(g_themeColor, COL_BG);
+            disp->drawString(g_hm.aiLastAction, 4, aiY + 48);
         }
 
         // AI cards (centered)
@@ -400,7 +407,7 @@ static void drawHoldemScreen() {
     }
 
     // ── POT + Blinds (top-right, flush right) ──
-    dispSetFont(disp,1);
+    disp->setTextFont(1);
     disp->setTextDatum(TR_DATUM);
     disp->setTextColor(g_themeColor, COL_BG);
     snprintf(buf, sizeof(buf), "POT:%lu", g_hm.pot);
@@ -426,13 +433,13 @@ static void drawHoldemScreen() {
             uint16_t col = suitColor(suit);
             disp->fillRoundRect(cx, commY, HCCARD_W, HCCARD_H, 4, fill);
             disp->drawRoundRect(cx, commY, HCCARD_W, HCCARD_H, 4, col);
-            dispSetFont(disp,1);
+            disp->setTextFont(1);
             disp->setTextColor(col, fill);
             disp->setTextDatum(TL_DATUM);
             disp->drawString(rankStr(rank), cx + 3, commY + 3);
             disp->setTextDatum(BR_DATUM);
             disp->drawString(rankStr(rank), cx + HCCARD_W - 3, commY + HCCARD_H - 3);
-            drawSuitSymbol(*disp, cx + HCCARD_W/2, commY + HCCARD_H/2 + 2, 14, suit);
+            drawSuitSymbol(tft, cx + HCCARD_W/2, commY + HCCARD_H/2 + 2, 14, suit);
         } else if (g_hm.stage >= HM_PREFLOP) {
             disp->fillRoundRect(cx, commY, HCCARD_W, HCCARD_H, 4, fill);
             disp->drawRoundRect(cx, commY, HCCARD_W, HCCARD_H, 4, g_themeColor);
@@ -449,7 +456,7 @@ static void drawHoldemScreen() {
     int commH = HCCARD_H;
 
     // ── Stage label + last action (between community and player) ──
-    dispSetFont(disp,1);
+    disp->setTextFont(1);
     disp->setTextDatum(TC_DATUM);
     const char* stageName = "";
     switch (g_hm.stage) {
@@ -470,7 +477,7 @@ static void drawHoldemScreen() {
     disp->drawString(stageName, midCardCX, stageY);
 
     // ── Player cards + info (bottom) ──
-    dispSetFont(disp,1);
+    disp->setTextFont(1);
     disp->setTextDatum(TL_DATUM);
 
     disp->setTextColor(g_themeColor, COL_BG);
@@ -478,7 +485,7 @@ static void drawHoldemScreen() {
     disp->drawString(buf, 4, plyY + 6);
 
     if (g_hm.playerBet > 0) {
-        disp->setTextColor(COL_LIGHT_GRAY, COL_BG);
+        disp->setTextColor(g_themeColor, COL_BG);
         snprintf(buf, sizeof(buf), "BET:%lu", g_hm.playerBet);
         disp->drawString(buf, 4, plyY + 18);
     }
@@ -501,7 +508,7 @@ static void drawHoldemScreen() {
         disp->fillRoundRect(dX, commY + 10, dW, dH, 6, COL_BG);
         disp->drawRoundRect(dX, commY + 10, dW, dH, 6, g_themeColor);
         disp->drawRoundRect(dX + 1, commY + 11, dW - 2, dH - 2, 6, g_themeColor);
-        dispSetFont(disp,2);
+        disp->setTextFont(2);
         disp->setTextColor(g_themeColor, COL_BG);
         drawCenterText(cardCX, commY + 10 + dH / 2, "DEAL");
 
@@ -516,19 +523,18 @@ static void drawHoldemScreen() {
         disp->fillRoundRect(foldX, plyY + 2, HM_SIDE_BTN_W, rh, 4, COL_BG);
         disp->drawRoundRect(foldX, plyY + 2, HM_SIDE_BTN_W, rh, 4, g_themeColor);
         disp->drawRoundRect(foldX + 1, plyY + 3, HM_SIDE_BTN_W - 2, rh - 2, 4, g_themeColor);
-        dispSetFont(disp,2);
+        disp->setTextFont(2);
         disp->setTextColor(g_themeColor, COL_BG);
-        disp->setTextDatum(MC_DATUM);
-        disp->drawString("FOLD", foldX + HM_SIDE_BTN_W / 2, plyY + 2 + rh / 2);
+        drawCenterText(foldX + HM_SIDE_BTN_W / 2, plyY + 2 + rh / 2, "FOLD");
 
         // RESET
         int resetY = plyY + 2 + rh + 4;
         disp->fillRoundRect(foldX, resetY, HM_SIDE_BTN_W, rh, 4, COL_BG);
         disp->drawRoundRect(foldX, resetY, HM_SIDE_BTN_W, rh, 4, g_themeColor);
         disp->drawRoundRect(foldX + 1, resetY + 1, HM_SIDE_BTN_W - 2, rh - 2, 4, g_themeColor);
-        dispSetFont(disp,2);
+        disp->setTextFont(2);
         disp->setTextColor(g_themeColor, COL_BG);
-        disp->drawString("RESET", foldX + HM_SIDE_BTN_W / 2, resetY + rh / 2);
+        drawCenterText(foldX + HM_SIDE_BTN_W / 2, resetY + rh / 2, "RESET");
 
         // CALL+RAISE — right of player cards, stacked
         int rightX = pc2x + HCARD_W + 8;
@@ -537,16 +543,16 @@ static void drawHoldemScreen() {
         disp->fillRoundRect(rightX, plyY + 2, rw, rh, 4, COL_BG);
         disp->drawRoundRect(rightX, plyY + 2, rw, rh, 4, g_themeColor);
         disp->drawRoundRect(rightX + 1, plyY + 3, rw - 2, rh - 2, 4, g_themeColor);
-        dispSetFont(disp,2);
+        disp->setTextFont(2);
         disp->setTextColor(g_themeColor, COL_BG);
-        disp->drawString(callLabel, rightX + rw / 2, plyY + 2 + rh / 2);
+        drawCenterText(rightX + rw / 2, plyY + 2 + rh / 2, callLabel);
 
         int raiseY = plyY + 2 + rh + 4;
         disp->fillRoundRect(rightX, raiseY, rw, rh, 4, COL_BG);
         disp->drawRoundRect(rightX, raiseY, rw, rh, 4, g_themeColor);
         disp->drawRoundRect(rightX + 1, raiseY + 1, rw - 2, rh - 2, 4, g_themeColor);
         disp->setTextColor(g_themeColor, COL_BG);
-        disp->drawString("RAISE", rightX + rw / 2, raiseY + rh / 2);
+        drawCenterText(rightX + rw / 2, raiseY + rh / 2, "RAISE");
 
     } else if (g_hm.stage == HM_HAND_OVER) {
         int btnW = HCARD_W * 2 + 6, btnH = 24;
@@ -556,7 +562,7 @@ static void drawHoldemScreen() {
         disp->fillRoundRect(btnX, btnY, btnW, btnH, 6, COL_BG);
         disp->drawRoundRect(btnX, btnY, btnW, btnH, 6, g_themeColor);
         disp->drawRoundRect(btnX + 1, btnY + 1, btnW - 2, btnH - 2, 6, g_themeColor);
-        dispSetFont(disp,2);
+        disp->setTextFont(2);
         disp->setTextColor(g_themeColor, COL_BG);
         drawCenterText(btnX + btnW / 2, btnY + btnH / 2, "NEXT HAND");
 
@@ -565,10 +571,9 @@ static void drawHoldemScreen() {
             int gapTop = commY + HCCARD_H;
             int gapH = plyY - gapTop;
             disp->fillRect(0, gapTop, SCREEN_W, gapH, COL_BG);
-            dispSetFont(disp,2);
+            disp->setTextFont(2);
             disp->setTextColor(g_themeColor, COL_BG);
-            disp->setTextDatum(MC_DATUM);
-            disp->drawString(g_hm.lastAction, cardCX, gapTop + gapH / 2);
+            drawCenterText(cardCX, gapTop + gapH / 2, g_hm.lastAction);
         }
         credits = g_hm.playerStack;
         saveCredits();
@@ -598,7 +603,7 @@ static void redrawAll() {
         disp->fillRoundRect(dealX, dealY, dealW, dealH, 6, COL_BG);
         disp->drawRoundRect(dealX, dealY, dealW, dealH, 6, g_themeColor);
         disp->drawRoundRect(dealX + 1, dealY + 1, dealW - 2, dealH - 2, 6, g_themeColor);
-        dispSetFont(disp,2);
+        disp->setTextFont(2);
         disp->setTextColor(g_themeColor, COL_BG);
         drawCenterText(SCREEN_W / 2, dealY + dealH / 2, "DEAL");
         // Mode toggle stays in right panel
@@ -613,14 +618,14 @@ static void redrawAll() {
         disp->fillRect(0, CARD_Y - 2, SCREEN_W, CARD_H + 20, COL_BG);
         for (int i = 0; i < 5; i++) {
             int cx = PAYTABLE_X + i * CARD_GAP;
-            drawCardFace(*disp, cx, CARD_Y, hand[i]);
-            drawHoldFrame(*disp, i, hold[i], false);
+            drawCardFace(tft, cx, CARD_Y, hand[i]);
+            drawHoldFrame(tft, i, hold[i], false);
         }
 
     } else if (gamePhase == 2) {
         drawActionButton("COLLECT");
         clearWinBox();
-        dispSetFont(disp,2);
+        disp->setTextFont(2);
         disp->setTextColor(COL_WHITE, COL_WIN_BG);
         drawCenterText(PT_X + PT_W / 2, PT_Y + PT_H / 3, WIN_NAMES[win]);
         updatePayout();
@@ -630,11 +635,11 @@ static void redrawAll() {
         drawGambleButtons();
         drawMessage("PICK  LOW  OR  HIGH  .  COLLECT  TO  KEEP", g_themeColor);
         disp->fillRect(0, CARD_Y - 2, SCREEN_W, CARD_H + 20, COL_BG);
-        drawCardBack(*disp, PT_X + 2 * CARD_GAP, CARD_Y);
+        drawCardBack(tft, PT_X + 2 * CARD_GAP, CARD_Y);
 
     } else if (gamePhase == 4) {
         clearWinBox();
-        dispSetFont(disp,2);
+        disp->setTextFont(2);
         disp->setTextColor(COL_WHITE, COL_WIN_BG);
         drawCenterText(PT_X + PT_W / 2, PT_Y + PT_H / 3, "GAME OVER");
         updatePayout();
@@ -649,7 +654,7 @@ static void redrawAll() {
 static void showThemeName() {
     // Briefly show theme name in message area
     disp->fillRect(RIGHT_X, 2, RIGHT_W, 54, COL_BG);
-    dispSetFont(disp,2);
+    disp->setTextFont(2);
     disp->setTextColor(g_themeColor, COL_BG);
     disp->setTextDatum(MC_DATUM);
     disp->drawString(g_themes[g_themeIdx].name, CREDITS_CX, BTN_Y - 14);
@@ -674,12 +679,12 @@ static void dealHand() {
     }
     for (int i = 0; i < 5; i++) {
         int cx = PAYTABLE_X + i * CARD_GAP;
-        if (!hold[i]) drawCardBack(*disp, cx, CARD_Y);
-        drawHoldFrame(*disp, i, hold[i], true);
+        if (!hold[i]) drawCardBack(tft, cx, CARD_Y);
+        drawHoldFrame(tft, i, hold[i], true);
     }
     for (int i = 0; i < 5; i++) {
         int cx = PAYTABLE_X + i * CARD_GAP;
-        drawCardFace(*disp, cx, CARD_Y, hand[i]);
+        drawCardFace(tft, cx, CARD_Y, hand[i]);
         if (disp == &tft) delay(50);
     }
 }
@@ -718,7 +723,7 @@ static void finalDraw() {
     evaluateWin(false);
     if (win >= 0) {
         clearWinBox();
-        dispSetFont(disp,2);
+        disp->setTextFont(2);
         disp->setTextColor(COL_WHITE, COL_WIN_BG);
         drawCenterText(PT_X + PT_W / 2, PT_Y + PT_H / 3, WIN_NAMES[win]);
         updatePayout();
@@ -733,7 +738,7 @@ static void finalDraw() {
         disp->fillRoundRect(SCREEN_W/2 - 40, 106, 80, 28, 6, COL_BG);
         disp->drawRoundRect(SCREEN_W/2 - 40, 106, 80, 28, 6, g_themeColor);
         disp->drawRoundRect(SCREEN_W/2 - 40 + 1, 107, 78, 26, 6, g_themeColor);
-        dispSetFont(disp,2);
+        disp->setTextFont(2);
         disp->setTextColor(g_themeColor, COL_BG);
         drawCenterText(SCREEN_W / 2, 120, "DEAL");
         gamePhase = 0;
@@ -745,7 +750,7 @@ static void startBet() {
     drawGambleButtons();
     drawMessage("PICK  LOW  OR  HIGH  .  COLLECT  TO  KEEP", g_themeColor);
     dice = 0;
-    drawCardBack(*disp, PT_X + 2 * CARD_GAP, CARD_Y);
+    drawCardBack(tft, PT_X + 2 * CARD_GAP, CARD_Y);
     gamePhase = 3;
 }
 
@@ -856,7 +861,7 @@ static void evaluateWin(bool doHold) {
             } else if (maximum <= 10 && pair1 == 0 && r == 1 && win == 9) {
                 hold[i] = true;
             }
-            drawHoldFrame(*disp, i, hold[i], false);
+            drawHoldFrame(tft, i, hold[i], false);
         }
     }
 
@@ -866,7 +871,7 @@ static void evaluateWin(bool doHold) {
 // ── Serial capture ─────────────────────────────────────────────────────────
 
 static void handleSerialCapture() {
-    GfxSprite spr(&tft);
+    TFT_eSprite spr(&tft);
     spr.setColorDepth(8);
     uint8_t *fb = (uint8_t *)spr.createSprite(SCREEN_W, SCREEN_H);
     if (!fb) {
@@ -884,187 +889,149 @@ static void handleSerialCapture() {
     spr.deleteSprite();
 }
 
-// ── Orientation test (2-USB only) ────────────────────────────────────────────
+// ── Calibration version ─────────────────────────────────────────────────────
+// Increment when calibration screens change to force re-calibration on upgrade.
+#define CURRENT_CAL_VER  3   // v1.1.0: universal 2USB compatibility release
 
-static int  g_rotMode = 0;      // 0-7 LovyanGFX rotation
-static bool g_invertOn = true;   // invert display state
+// ── ILI9341 MADCTL configuration for 2USB landscape displays ──────────────
+// Different CYD boards mount the LCD glass in different orientations.  We
+// combine two bits to cover all variants:
+//   MV (bit 5): row/column swap — fixes 90 degree rotation on portrait-native glass
+//   MY (bit 7): Y-axis mirror — fixes upside-down display
+// Four combos cycle via calibration; the chosen value is stored in NVS.
+static uint8_t s_madctl = 0x80;   // NVS-backed MADCTL value (default: MY)
 
-#ifdef USE_LOVYAN_GFX
-  static const char* ROT_NAMES[] = {
-      "Rot 0 Portrait", "Rot 1 Landscape", "Rot 2 Port 180",
-      "Rot 3 Land 180", "Rot 4 Port Mirr", "Rot 5 Land Mirr",
-      "Rot 6 Port180Mirr", "Rot 7 Land180Mirr",
-  };
-  static const int ROT_COUNT = 8;
-
-  static void applyOrientation() {
-      tft.setRotation(g_rotMode);
-      tft.invertDisplay(g_invertOn);
-  }
+static void applyOrientation() {
+#if CYD_USB_VERSION == 2
+    tft.setRotation(1);                              // landscape dimensions
+    tft.writecommand(TFT_MADCTL);                    // override MADCTL set by setRotation
+    tft.writedata(s_madctl);
 #else
-  static const char* ROT_NAMES[] = {
-      "Standard", "Land 180", "Land+MirX", "Land+MirY", "Manual 180",
-  };
-  static const int ROT_COUNT = 5;
-
-  static void applyOrientation() {
-      switch (g_rotMode) {
-          case 0: tft.setRotation(1); break;
-          case 1: tft.setRotation(3); break;
-          case 2: tft.setRotation(1);
-                  tft.writecommand(TFT_MADCTL);
-                  tft.writedata(TFT_MAD_MX | TFT_MAD_BGR); break;
-          case 3: tft.setRotation(1);
-                  tft.writecommand(TFT_MADCTL);
-                  tft.writedata(TFT_MAD_MY | TFT_MAD_BGR); break;
-          case 4: tft.setRotation(1);
-                  tft.writecommand(TFT_MADCTL);
-                  tft.writedata(TFT_MAD_MX | TFT_MAD_MY | TFT_MAD_BGR); break;
-      }
-      tft.invertDisplay(g_invertOn);
-  }
+    tft.setRotation(1);
 #endif
-
-// Orientation test: tap LEFT half to rotate, RIGHT half to toggle invert.
-// Uses full-screen halves so touch mapping can't miss.
-static bool hitOrientRotBtn() { return tx < SCREEN_W / 2; }
-static bool hitOrientInvBtn() { return tx >= SCREEN_W / 2; }
-
-static void drawOrientationUI() {
-    disp->fillScreen(COL_BG);
-
-    // Corner labels
-    dispSetFont(disp,2);
-    disp->setTextColor(COL_WHITE, COL_BG);
-    disp->setTextDatum(TL_DATUM);  disp->drawString("NW", 2, 2);
-    disp->setTextDatum(TR_DATUM);  disp->drawString("NE", SCREEN_W - 2, 2);
-    disp->setTextDatum(BL_DATUM);  disp->drawString("SW", 2, SCREEN_H - 2);
-    disp->setTextDatum(BR_DATUM);  disp->drawString("SE", SCREEN_W - 2, SCREEN_H - 2);
-
-    // Center crosshair
-    disp->drawLine(SCREEN_W/2 - 10, SCREEN_H/2, SCREEN_W/2 + 10, SCREEN_H/2, COL_WHITE);
-    disp->drawLine(SCREEN_W/2, SCREEN_H/2 - 10, SCREEN_W/2, SCREEN_H/2 + 10, COL_WHITE);
-
-    // Status line
-    dispSetFont(disp,1);
-    disp->setTextDatum(BC_DATUM);
-    disp->setTextColor(g_themeColor, COL_BG);
-    char st[48];
-    snprintf(st, sizeof(st), "%s  |  INVERT:%s", ROT_NAMES[g_rotMode], g_invertOn ? "ON" : "OFF");
-    disp->drawString(st, SCREEN_W/2, SCREEN_H - 30);
-
-    // Left half label
-    dispSetFont(disp,2);
-    disp->setTextColor(COL_DIM_GRAY, COL_BG);
-    disp->setTextDatum(BC_DATUM);
-    disp->drawString("TAP:ROTATE", SCREEN_W/4, SCREEN_H - 10);
-
-    // Right half label
-    disp->drawString("TAP:INVERT", SCREEN_W*3/4, SCREEN_H - 10);
-
-    // Vertical divider
-    disp->drawFastVLine(SCREEN_W/2, SCREEN_H - 40, 40, COL_DIM_GRAY);
-
-    // Confirm hint
-    dispSetFont(disp,1);
-    disp->setTextColor(COL_DIM_GRAY, COL_BG);
-    disp->setTextDatum(TR_DATUM);
-    disp->drawString("hold 2s to confirm", SCREEN_W - 2, 2);
 }
 
-static bool readTouchQuick() {
-    if (!ts.touched()) return false;
-    TS_Point p = ts.getPoint();
-    tx = map(p.y, TOUCH_Y_MIN, TOUCH_Y_MAX, 0, SCREEN_W - 1);
-    ty = map(p.x, TOUCH_X_MIN, TOUCH_X_MAX, SCREEN_H - 1, 0);
-    tx = constrain(tx, 0, SCREEN_W - 1);
-    ty = constrain(ty, 0, SCREEN_H - 1);
-    return true;
+// Build the MADCTL value for a given combo index (0-3).
+// 0: MV=1, MY=0 -> 0x28 (swap, no mirror  — portrait glass)
+// 1: MV=1, MY=1 -> 0xA8 (swap + mirror)
+// 2: MV=0, MY=0 -> 0x00 (no swap, no mirror — landscape glass)
+// 3: MV=0, MY=1 -> 0x80 (no swap, mirror   — landscape glass flipped)
+static uint8_t madctlForCombo(int idx) {
+    switch (idx & 3) {
+        case 0:  return TFT_MAD_MV | TFT_MAD_BGR;            // 0x28
+        case 1:  return TFT_MAD_MV | TFT_MAD_MY | TFT_MAD_BGR; // 0xA8
+        case 2:  return 0x00;                                // 0x00
+        default: return TFT_MAD_MY;                          // 0x80
+    }
 }
 
-static void runOrientationTest() {
-    // Load saved orientation or start with default (landscape, invert on)
-    { Preferences p; p.begin("cyd-poker", true);
-      g_rotMode  = p.getInt("rot_mode", 1);
-      g_invertOn = p.getInt("rot_inv", 1) != 0;
-      p.end(); }
-    applyOrientation();
-    drawOrientationUI();
+// ── First-boot display calibration (2USB only) ────────────────────────────
+// Cycles through the 4 MADCTL combinations so the user can find the correct
+// one.  Shows a large asymmetric pattern that makes the orientation obvious.
+static void displayCalibrate() {
+#if CYD_USB_VERSION == 2
+    if (nvsGetInt("cal_ver", -1) >= CURRENT_CAL_VER) {
+        s_madctl = (uint8_t)nvsGetInt("madctl", 0x80);
+        return;
+    }
 
-    unsigned long lastTap = millis();
-    unsigned long holdStart = 0;
-    bool wasTouching = false;
-    bool confirmed = false;
+    s_madctl = madctlForCombo(0);  // start at combo 0
+    digitalWrite(TFT_BL, HIGH);
 
-    while (true) {
-        bool isTouching = readTouchQuick();
+    auto drawDisplayCal = [&]() {
+        disp->fillScreen(COL_BG);
+        applyOrientation();
+        disp->fillScreen(COL_BG);
 
-        if (!isTouching && wasTouching) {
-            if (millis() - holdStart < 1000) {
-                if (hitOrientRotBtn()) {
-                    g_rotMode = (g_rotMode + 1) % ROT_COUNT;
-                    applyOrientation();
-                    drawOrientationUI();
-                    lastTap = millis();
-                } else if (hitOrientInvBtn()) {
-                    g_invertOn = !g_invertOn;
-                    applyOrientation();
-                    drawOrientationUI();
-                    lastTap = millis();
+        // ── Distinctive corner markers ──
+        // Top-left: amber filled triangle pointing down-right
+        disp->fillTriangle(2, 2, 60, 2, 2, 60, COL_AMBER);
+        disp->fillTriangle(4, 4, 56, 4, 4, 56, COL_BG);
+        disp->fillTriangle(2, 2, 60, 2, 2, 60, COL_AMBER);
+
+        // Top-right: colored "L" bracket
+        disp->fillRect(SCREEN_W - 50, 2, 48, 8, g_themeColor);
+        disp->fillRect(SCREEN_W - 8, 2, 6, 48, g_themeColor);
+
+        // Bottom-left: amber ring
+        disp->fillCircle(24, SCREEN_H - 24, 20, COL_AMBER);
+        disp->fillCircle(24, SCREEN_H - 24, 16, COL_BG);
+        disp->fillCircle(24, SCREEN_H - 24, 20, COL_AMBER);
+
+        // Bottom-right: crosshair + circle
+        disp->drawLine(SCREEN_W - 40, SCREEN_H - 24, SCREEN_W - 8, SCREEN_H - 24, g_themeColor);
+        disp->drawLine(SCREEN_W - 24, SCREEN_H - 40, SCREEN_W - 24, SCREEN_H - 8, g_themeColor);
+        disp->drawCircle(SCREEN_W - 24, SCREEN_H - 24, 14, g_themeColor);
+
+        // Center: "T" orientation letter
+        disp->fillRect(SCREEN_W / 2 - 16, SCREEN_H / 2 - 24, 32, 6, COL_WHITE);
+        disp->fillRect(SCREEN_W / 2 - 4, SCREEN_H / 2 - 24, 8, 48, COL_WHITE);
+
+        // ── Combo number and description ──
+        int idx;
+        if      (s_madctl == (TFT_MAD_MV | TFT_MAD_BGR))               idx = 0;
+        else if (s_madctl == (TFT_MAD_MV | TFT_MAD_MY | TFT_MAD_BGR))   idx = 1;
+        else if (s_madctl == 0x00)                                      idx = 2;
+        else                                                             idx = 3;
+
+        disp->setTextFont(4);
+        disp->setTextColor(g_themeColor, COL_BG);
+        char buf[16]; snprintf(buf, sizeof(buf), "MODE %d", idx);
+        int tw = disp->textWidth(buf);
+        disp->setCursor((SCREEN_W - tw) / 2, 68);
+        disp->print(buf);
+
+        // Tap instruction
+        disp->setTextFont(2);
+        disp->setTextColor(COL_WHITE, COL_BG);
+        const char *msg = "Tap to change";
+        tw = disp->textWidth(msg);
+        disp->setCursor((SCREEN_W - tw) / 2, SCREEN_H - 72);
+        disp->print(msg);
+
+        // Hold instruction
+        disp->setTextFont(1);
+        disp->setTextColor(COL_DIM_GRAY, COL_BG);
+        msg = "Hold 2s to confirm";
+        tw = disp->textWidth(msg);
+        disp->setCursor((SCREEN_W - tw) / 2, SCREEN_H - 52);
+        disp->print(msg);
+    };
+
+    drawDisplayCal();
+
+    {
+        unsigned long holdStart = 0;
+        bool wasTouched = false;
+        int  curCombo = 0;
+
+        while (true) {
+            bool nowTouched = touchIsHeld();
+
+            if (nowTouched && !wasTouched) {
+                holdStart = millis();
+            } else if (!nowTouched && wasTouched && holdStart > 0) {
+                if (millis() - holdStart < 1200) {
+                    curCombo = (curCombo + 1) & 3;
+                    s_madctl = madctlForCombo(curCombo);
+                    drawDisplayCal();
                 }
             }
-            holdStart = 0;
+
+            if (nowTouched && wasTouched && holdStart > 0) {
+                if (millis() - holdStart >= 2000) break;
+            }
+
+            wasTouched = nowTouched;
+            delay(30);
         }
 
-        if (isTouching && !wasTouching) {
-            holdStart = millis();
-        }
-
-        // Long hold (2s) anywhere confirms current settings
-        if (isTouching && holdStart > 0 && millis() - holdStart >= 2000) {
-            disp->fillScreen(COL_BG);
-            dispSetFont(disp,2);
-            disp->setTextColor(g_themeColor, COL_BG);
-            disp->setTextDatum(MC_DATUM);
-            disp->drawString("CONFIRMED", SCREEN_W/2, SCREEN_H/2 - 10);
-            dispSetFont(disp,1);
-            char st[48];
-            snprintf(st, sizeof(st), "%s INV:%s", ROT_NAMES[g_rotMode], g_invertOn ? "ON" : "OFF");
-            disp->drawString(st, SCREEN_W/2, SCREEN_H/2 + 12);
-            // Save to NVS
-            { Preferences p; p.begin("cyd-poker", false);
-              p.putInt("rot_mode", g_rotMode);
-              p.putInt("rot_inv", g_invertOn ? 1 : 0);
-              p.putInt("rot_cal", 1);
-              p.end(); }
-            confirmed = true;
-            delay(1000);
-            break;
-        }
-
-        if (millis() - lastTap > 30000) break;
-
-        wasTouching = isTouching;
-        delay(20);
+        while (touchIsHeld()) { delay(30); }
+        delay(200);
     }
 
-    // If confirmed, stay with new settings. Otherwise revert to saved.
-    if (!confirmed) {
-        { Preferences p; p.begin("cyd-poker", true);
-          g_rotMode  = p.getInt("rot_mode", 1);
-          g_invertOn = p.getInt("rot_inv", 1) != 0;
-          p.end(); }
-        applyOrientation();
-    }
-}
-
-// First-boot gate — only runs once on 2USB, skips if already calibrated
-static void rotationCalibrate() {
-#if CYD_USB_VERSION == 2
-    { Preferences p; p.begin("cyd-poker", true);
-      int cal = p.getInt("rot_cal", 0); p.end();
-      if (cal != 0) return; }
-    runOrientationTest();
+    nvsPutInt("madctl", s_madctl);
+    // cal_ver is written by touchCalibrate() below
 #endif
 }
 
@@ -1100,24 +1067,24 @@ static void showSplash() {
         // Rank
         uint8_t suit = cardSuit(aces[i]);
         uint16_t col = suitColor(suit);
-        dispSetFont(disp,4);
+        disp->setTextFont(4);
         disp->setTextColor(col, fill);
         disp->setTextDatum(MC_DATUM);
         disp->drawString("A", cx + cardW/2, cy + cardH/2 - 4);
 
         // Suit symbol
-        drawSuitSymbol(*disp, cx + cardW/2, cy + cardH/2 + 20, 16, suit);
+        drawSuitSymbol(tft, cx + cardW/2, cy + cardH/2 + 20, 16, suit);
     }
 
     // ── Branding ──
     int tw;
-    dispSetFont(disp,4);
+    disp->setTextFont(4);
     disp->setTextColor(g_themeColor, COL_BG);
     tw = disp->textWidth("xXMayDayXx");
     disp->setCursor((SCREEN_W - tw) / 2, 104);
     disp->print("xXMayDayXx");
 
-    dispSetFont(disp,2);
+    disp->setTextFont(2);
     disp->setTextColor(COL_WHITE, COL_BG);
     tw = disp->textWidth("xXCYD-PokerXx");
     disp->setCursor((SCREEN_W - tw) / 2, 140);
@@ -1128,72 +1095,131 @@ static void showSplash() {
     disp->setCursor((SCREEN_W - tw) / 2, 162);
     disp->print("xXQuantum-SmokeXx");
 
-    dispSetFont(disp,1);
+    disp->setTextFont(1);
     disp->setTextColor(COL_DIM_GRAY, COL_BG);
     tw = disp->textWidth("Loading...");
     disp->setCursor((SCREEN_W - tw) / 2, 200);
     disp->print("Loading...");
 }
 
-// ── First-boot touch calibration ──────────────────────────────────────────────
-// Shows a target in the top-left corner. If the user taps it and the reported
-// position lands in the bottom-right (180 opposite), touch needs flipping.
-// Runs once; persisted via NVS key "touch_cal". Serial 'T' can retrigger.
-
-static void touchCalibrate(bool force = false) {
+// ── First-boot touch calibration (2USB only) ──────────────────────────────
+// 2USB boards ship with digitizers in one of four orientations. Cycles
+// through all four XPT2046 rotations (0-3) so the user can find the one
+// where the touch cursor follows their finger correctly.
+// Tap to cycle; hold 2s to confirm. Runs once (cal_ver guard).
+static void touchCalibrate() {
 #if CYD_USB_VERSION == 2
-    if (!force) {
-        Preferences p; p.begin("cyd-poker", true); int cal = p.getInt("touch_cal", 0); p.end();
-        if (cal != 0) return;
-    }
+    if (nvsGetInt("cal_ver", -1) >= CURRENT_CAL_VER) return;
 
-    // Backlight on
-    pinMode(TFT_BL, OUTPUT);
     digitalWrite(TFT_BL, HIGH);
 
-    tft.fillScreen(COL_BG);
+    // ── Draw static background ──
+    auto drawStatic = [&]() {
+        disp->fillScreen(COL_BG);
 
-    // Draw target box in top-left
-    const int TX = 20, TY = 38, TW = 80, TH = 50;
-    tft.fillRect(TX, TY, TW, TH, g_themeColor);
-    dispSetFont(disp, 4);
-    tft.setTextColor(COL_BG, g_themeColor);
-    tft.setCursor(TX + 8, TY + TH / 2 - 8);
-    tft.print("TAP");
+        // Rotation number dead center
+        disp->setTextFont(4);
+        disp->setTextColor(g_themeColor, COL_BG);
+        char buf[4]; snprintf(buf, sizeof(buf), "%d", touchGetRotation());
+        int tw = disp->textWidth(buf);
+        disp->setTextDatum(TC_DATUM);
+        disp->drawString(buf, SCREEN_W / 2, SCREEN_H / 2 - 40);
 
-    // Instructions at screen center — invariant under 180 rotation
-    {
-        dispSetFont(disp, 4);
-        tft.setTextColor(COL_WHITE, COL_BG);
-        const char *msg = "Tap the box above";
-        int tw = tft.textWidth(msg);
-        tft.setCursor((SCREEN_W - tw) / 2, SCREEN_H / 2 - 20);
-        tft.print(msg);
+        // Primary instruction
+        disp->setTextFont(2);
+        disp->setTextColor(COL_WHITE, COL_BG);
+        const char *msg = "Tap to cycle touch";
+        tw = disp->textWidth(msg);
+        disp->setTextDatum(TC_DATUM);
+        disp->drawString(msg, SCREEN_W / 2, SCREEN_H / 2);
 
-        dispSetFont(disp, 2);
-        tft.setTextColor(COL_DIM_GRAY, COL_BG);
-        msg = "(or wait 15s for default)";
-        tw = tft.textWidth(msg);
-        tft.setCursor((SCREEN_W - tw) / 2, SCREEN_H / 2);
-        tft.print(msg);
-    }
+        // Secondary instruction
+        disp->setTextFont(1);
+        disp->setTextColor(COL_DIM_GRAY, COL_BG);
+        msg = "Hold 2s to confirm";
+        tw = disp->textWidth(msg);
+        disp->setTextDatum(TC_DATUM);
+        disp->drawString(msg, SCREEN_W / 2, SCREEN_H / 2 + 30);
 
-    // Poll for a single tap
-    unsigned long start = millis();
-    while (millis() - start < 15000) {
-        if (readTouch()) {
-            // If the user tapped the visible target (top-left) but the
-            // touch reports bottom-right coords, the digitizer is 180 off.
-            // Target: x=20..100, y=38..88  -> 180-rotated: x=220..300, y=152..202
-            if (tx >= 220 && tx <= 300 && ty >= 152 && ty <= 202) {
-                touchSetFlipped(!s_touchFlipped);
-            }
-            break;
+        // Four corner crosshair targets
+        const int CX = 14, CY = 14, CS = 18;
+        uint16_t tc = COL_DIM_GRAY;
+        disp->drawRect(CX, CY, CS, CS, tc);
+        disp->drawLine(CX, CY, CX + CS, CY + CS, tc);
+        disp->drawLine(CX, CY + CS, CX + CS, CY, tc);
+
+        disp->drawRect(SCREEN_W - CX - CS, CY, CS, CS, tc);
+        disp->drawLine(SCREEN_W - CX - CS, CY, SCREEN_W - CX, CY + CS, tc);
+        disp->drawLine(SCREEN_W - CX - CS, CY + CS, SCREEN_W - CX, CY, tc);
+
+        disp->drawRect(CX, SCREEN_H - CY - CS, CS, CS, tc);
+        disp->drawLine(CX, SCREEN_H - CY, CX + CS, SCREEN_H - CY - CS, tc);
+        disp->drawLine(CX, SCREEN_H - CY - CS, CX + CS, SCREEN_H - CY, tc);
+
+        disp->drawRect(SCREEN_W - CX - CS, SCREEN_H - CY - CS, CS, CS, tc);
+        disp->drawLine(SCREEN_W - CX, SCREEN_H - CY, SCREEN_W - CX - CS, SCREEN_H - CY - CS, tc);
+        disp->drawLine(SCREEN_W - CX - CS, SCREEN_H - CY, SCREEN_W - CX, SCREEN_H - CY - CS, tc);
+    };
+
+    drawStatic();
+
+    unsigned long holdStart = 0;
+    bool wasTouched = false;
+    int curX = -1, curY = -1;
+    int lastX = -1, lastY = -1;
+    bool dirty = false;
+
+    while (true) {
+        int16_t tx, ty;
+        bool nowTouched = touchIsHeld(&tx, &ty);
+
+        if (nowTouched) {
+            curX = tx; curY = ty;
         }
-        delay(20);
+
+        // ── Touch-down ──
+        if (nowTouched && !wasTouched) {
+            holdStart = millis();
+            lastX = curX; lastY = curY;
+            dirty = true;
+        }
+        // ── Released ──
+        else if (!nowTouched && wasTouched && holdStart > 0) {
+            if (millis() - holdStart < 1200) {
+                touchSetRotation((touchGetRotation() + 1) % 4);
+                drawStatic();
+            }
+            // Erase cursor
+            if (lastX >= 0) disp->fillCircle(lastX, lastY, 7, COL_BG);
+            lastX = lastY = -1;
+            dirty = false;
+        }
+        // ── Hold-to-confirm ──
+        else if (nowTouched && wasTouched && holdStart > 0) {
+            if (millis() - holdStart >= 2000) {
+                if (lastX >= 0) disp->fillCircle(lastX, lastY, 7, COL_BG);
+                break;
+            }
+        }
+
+        // ── Update live cursor ──
+        if (nowTouched && dirty && (curX != lastX || curY != lastY)) {
+            if (lastX >= 0) disp->fillCircle(lastX, lastY, 7, COL_BG);
+            disp->fillCircle(curX, curY, 6, COL_AMBER);
+            disp->drawCircle(curX, curY, 6, COL_WHITE);
+            lastX = curX; lastY = curY;
+        }
+
+        wasTouched = nowTouched;
+        delay(30);
     }
 
-    { Preferences p; p.begin("cyd-poker", false); p.putInt("touch_cal", 1); p.end(); }
+    // Wait for finger to lift
+    while (touchIsHeld()) { delay(30); }
+    delay(200);
+
+    nvsPutInt("cal_ver", CURRENT_CAL_VER);  // marks ALL calibrations complete
+    nvsPutInt("touch_cal", 1);              // keep old key for backwards compat
 #endif
 }
 
@@ -1210,51 +1236,52 @@ void setup() {
     tft.init();
 
     // ── Display rotation ─────────────────────────────────────────────────
-    // ESP32-32E (1-USB): standard landscape → rotation 1
-    // 2-USB: NVS-backed orientation (calibrated on first boot)
+    // 1-USB: standard landscape → rotation 1
+    // 2-USB: NVS-backed LGFX rotation (calibrated on first boot)
 #if CYD_USB_VERSION == 2
-    { Preferences p; p.begin("cyd-poker", true);
-      g_rotMode  = p.getInt("rot_mode", 1);
-      g_invertOn = p.getInt("rot_inv", 1) != 0;
-      p.end(); }
+    s_madctl = (uint8_t)nvsGetInt("madctl", 0x80);
     applyOrientation();
 #else
     tft.setRotation(1);
 #endif
 
-    tft.fillScreen(COL_BG);
+    disp->fillScreen(COL_BG);
 
     // Init touch early so calibration can use it
     touchSPI.begin(TOUCH_SCLK, TOUCH_MISO, TOUCH_MOSI, TOUCH_CS);
     ts.begin(touchSPI);
 #if CYD_USB_VERSION == 2
-    // 2USB boards have two touch-digitizer orientations. Load saved flip
-    // state from NVS; default to flipped (rotation 2) which works on most boards.
+    // 2USB boards have multiple touch-digitizer orientations.
+    // "touch_rot" (0-3) stores the XPT2046 rotation index.
+    // Migrate from old "touch_cal" / "touch_flip" boolean keys if present.
     {
         Preferences p; p.begin("cyd-poker", true);
-        s_touchFlipped = p.getInt("touch_cal", 0) != 0;
-        // Fallback: if "touch_cal" not set, check older "touch_flip" key
-        if (!s_touchFlipped) s_touchFlipped = p.getInt("touch_flip", 1) != 0;
+        int rot = p.getInt("touch_rot", -1);
+        if (rot < 0) {
+            int oldCal = p.getInt("touch_cal", 0);
+            if (!oldCal) oldCal = p.getInt("touch_flip", 1);
+            rot = oldCal ? 2 : 0;
+        }
+        s_touchRotation = rot;
         p.end();
     }
-    ts.setRotation(s_touchFlipped ? 2 : 0);
+    ts.setRotation(s_touchRotation);
 #else
     ts.setRotation(0);   // 1-USB: standard touch orientation
 #endif
 
-    // First-boot calibrations — only on 2USB, only once each
-    rotationCalibrate();
+    // First-boot calibrations — only on 2USB, only when cal_ver < CURRENT_CAL_VER
+    displayCalibrate();
+    applyOrientation();   // re-apply in case calibration changed it
     touchCalibrate();
 
     // Boot splash
     showSplash();
     delay(4000);
 
-#ifndef USE_LOVYAN_GFX
-    // Backlight — LGFX handles this via its PWM light instance
+    // Backlight on
     pinMode(TFT_BL, OUTPUT);
     digitalWrite(TFT_BL, HIGH);
-#endif
 
     redrawAll();
     Serial.println("CYD-Poker ready");
@@ -1269,6 +1296,29 @@ void loop() {
         if (cmd == 'R' || cmd == 'r') Serial.println("READY");
         else if (cmd == 'S' || cmd == 's') handleSerialCapture();
         else if (cmd >= '0' && cmd <= '9') redrawAll();
+#if CYD_USB_VERSION == 2
+        else if (cmd == 'M' || cmd == 'm') {
+            int cur = 3;
+            if      (s_madctl == (TFT_MAD_MV | TFT_MAD_BGR))               cur = 0;
+            else if (s_madctl == (TFT_MAD_MV | TFT_MAD_MY | TFT_MAD_BGR)) cur = 1;
+            else if (s_madctl == 0x00)                                     cur = 2;
+            cur = (cur + 1) & 3;
+            s_madctl = madctlForCombo(cur);
+            nvsPutInt("madctl", s_madctl);
+            nvsPutInt("cal_ver", CURRENT_CAL_VER);
+            applyOrientation();
+            Serial.print("MADCTL_MODE:");
+            Serial.println(cur);
+            redrawAll();
+        }
+        else if (cmd == 'T' || cmd == 't') {
+            int rot = (touchGetRotation() + 1) % 4;
+            touchSetRotation(rot);
+            nvsPutInt("touch_cal", 1);
+            Serial.print("TOUCH_ROT:");
+            Serial.println(rot);
+        }
+#endif
     }
 
     readTouch();
