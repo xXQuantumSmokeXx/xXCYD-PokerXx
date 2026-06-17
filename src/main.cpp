@@ -15,6 +15,7 @@ static TFT_eSPI    *disp = &tft;  // drawing target — normally &tft, swapped t
 #include "theme.h"
 #include "cards.h"
 #include "holdem.h"
+#include "slots.h"
 
 static SPIClass    touchSPI(VSPI);
 static XPT2046_Touchscreen ts(TOUCH_CS);
@@ -384,16 +385,19 @@ static void drawHoldemScreen() {
         snprintf(buf, sizeof(buf), "xXSmokeXx:%lu", g_hm.aiStack);
         disp->drawString(buf, 4, aiY + 24);
 
-        // AI status
-        if (g_hm.stage < HM_HAND_OVER) {
-            disp->setTextColor(g_themeColor, COL_BG);
-            disp->drawString(holdemAIStatus(), 4, aiY + 36);
-        }
-
-        // AI last action (fold/raise/call + amounts)
+        // AI last action — under name (where status was)
         if (g_hm.aiLastAction[0]) {
             disp->setTextColor(g_themeColor, COL_BG);
-            disp->drawString(g_hm.aiLastAction, 4, aiY + 48);
+            disp->drawString(g_hm.aiLastAction, 4, aiY + 36);
+        }
+
+        // AI status — centered between AI cards and community cards
+        if (g_hm.stage < HM_HAND_OVER) {
+            int statusY = (aiY + HCARD_H + commY) / 2 - 5;
+            disp->setTextDatum(TC_DATUM);
+            disp->setTextColor(g_themeColor, COL_BG);
+            disp->drawString(holdemAIStatus(), SCREEN_W / 2 + 15, statusY);
+            disp->setTextDatum(TL_DATUM);  // restore
         }
 
         // AI cards (centered)
@@ -470,7 +474,7 @@ static void drawHoldemScreen() {
     }
     int midCardCX = ccx0 + 2 * ccGap + HCCARD_W / 2;
     int gapTop = commY + commH;
-    int stageY = (gapTop + plyY) / 2;  // centered between community and player
+    int stageY = (gapTop + plyY) / 2 - 5;  // centered between community and player
 
     disp->fillRect(midCardCX - 70, stageY - 6, 140, 16, COL_BG);
     disp->setTextColor(g_themeColor, COL_BG);
@@ -588,6 +592,12 @@ static void redrawAll() {
         return;
     }
 
+    if (gameMode == 2) {
+        slotsDraw(*disp, credits);
+        drawPowerButton();
+        return;
+    }
+
     disp->fillScreen(COL_BG);
 
     drawPayTable();
@@ -597,9 +607,9 @@ static void redrawAll() {
 
     if (gamePhase == 0) {
         // Centered DEAL button — below paytable, above cards
-        int dealW = 80, dealH = 28;
+        int dealW = 65, dealH = 20;
         int dealX = SCREEN_W / 2 - dealW / 2;
-        int dealY = 102;
+        int dealY = 107;
         disp->fillRoundRect(dealX, dealY, dealW, dealH, 6, COL_BG);
         disp->drawRoundRect(dealX, dealY, dealW, dealH, 6, g_themeColor);
         disp->drawRoundRect(dealX + 1, dealY + 1, dealW - 2, dealH - 2, 6, g_themeColor);
@@ -608,6 +618,16 @@ static void redrawAll() {
         drawCenterText(SCREEN_W / 2, dealY + dealH / 2, "DEAL");
         // Mode toggle stays in right panel
         drawModeToggle();
+        // SLOTS button
+        {
+            int sx = MODE_BTN_X, sy = MODE_BTN_Y + MODE_BTN_H + 4;
+            disp->fillRoundRect(sx, sy, MODE_BTN_W, MODE_BTN_H, 5, COL_BG);
+            disp->drawRoundRect(sx, sy, MODE_BTN_W, MODE_BTN_H, 5, g_themeColor);
+            disp->drawRoundRect(sx + 1, sy + 1, MODE_BTN_W - 2, MODE_BTN_H - 2, 5, g_themeColor);
+            disp->setTextFont(1);
+            disp->setTextColor(g_themeColor, COL_BG);
+            drawCenterText(sx + MODE_BTN_W / 2, sy + MODE_BTN_H / 2, "SLOTS");
+        }
         disp->fillRect(0, CARD_Y - 2, SCREEN_W, CARD_H + 20, COL_BG);
         drawEmptySlots();
 
@@ -709,8 +729,9 @@ static void startDeal() {
     dealHand();
     evaluateWin(true);
     if (win >= 0) highlightWin(g_themeColor);
-    // Clear old centered DEAL button from idle screen
-    disp->fillRect(SCREEN_W/2 - 40, 102, 80, 28, COL_BG);
+    // Clear old centered DEAL button + mode toggle area
+    disp->fillRect(SCREEN_W/2 - 32, 107, 65, 20, COL_BG);
+    disp->fillRect(RIGHT_X, MODE_BTN_Y, RIGHT_W, MODE_BTN_H * 2 + 8, COL_BG);
     drawActionButton("DRAW");
     drawMessage("TAP  CARDS  TO  HOLD  .  THEN  DRAW", g_themeColor);
     gamePhase = 1;
@@ -735,12 +756,13 @@ static void finalDraw() {
         disp->fillRect(BTN_X - 2, BTN_Y - 2, BTN_W + 4, BTN_H + 4, COL_BG);
         disp->fillRect(0, 100, SCREEN_W, 40, COL_BG);
         // Centered DEAL button
-        disp->fillRoundRect(SCREEN_W/2 - 40, 106, 80, 28, 6, COL_BG);
-        disp->drawRoundRect(SCREEN_W/2 - 40, 106, 80, 28, 6, g_themeColor);
-        disp->drawRoundRect(SCREEN_W/2 - 40 + 1, 107, 78, 26, 6, g_themeColor);
+        int dlX = SCREEN_W/2 - 32, dlY = 111, dlW = 65, dlH = 20;
+        disp->fillRoundRect(dlX, dlY, dlW, dlH, 5, COL_BG);
+        disp->drawRoundRect(dlX, dlY, dlW, dlH, 5, g_themeColor);
+        disp->drawRoundRect(dlX + 1, dlY + 1, dlW - 2, dlH - 2, 5, g_themeColor);
         disp->setTextFont(2);
         disp->setTextColor(g_themeColor, COL_BG);
-        drawCenterText(SCREEN_W / 2, 120, "DEAL");
+        drawCenterText(SCREEN_W / 2, dlY + dlH / 2, "DEAL");
         gamePhase = 0;
     }
 }
@@ -1098,7 +1120,7 @@ static void showSplash() {
     disp->setTextFont(1);
     disp->setTextColor(COL_DIM_GRAY, COL_BG);
     tw = disp->textWidth("Loading...");
-    disp->setCursor((SCREEN_W - tw) / 2, 200);
+    disp->setCursor((SCREEN_W - tw) / 2, 190);
     disp->print("Loading...");
 }
 
@@ -1232,6 +1254,7 @@ void setup() {
     themeInit();
     loadCredits();
     holdemInit();
+    slotsInit();
 
     tft.init();
 
@@ -1320,6 +1343,9 @@ void loop() {
         }
 #endif
     }
+
+    // ── Slots animation (runs every frame, independent of touch) ──────
+    if (gameMode == 2) slotsAnimate(tft, credits);
 
     readTouch();
     if (!touched) { delay(40); return; }
@@ -1420,6 +1446,61 @@ void loop() {
         return;
     }
 
+    // ── Slots mode ──────────────────────────────────────────────────
+    if (gameMode == 2) {
+        if (touched) {
+            // VIDEO POKER back button
+            if (tx >= HM_BACK_X && tx <= HM_BACK_X + 80 &&
+                ty >= HM_BACK_Y && ty <= HM_BACK_Y + HM_BACK_H) {
+                if (g_slots.winAmount > 0) { credits += g_slots.winAmount; g_slots.winAmount = 0; }
+                if (g_slots.gambleAmount > 0) { credits += g_slots.gambleAmount; g_slots.gambleAmount = 0; }
+                saveCredits();
+                gameMode = 0;
+                gamePhase = 0;
+                redrawAll();
+                delay(300);
+                return;
+            }
+
+            // Credit-guard SPIN: check before allowing the tap
+            bool canSpin = true;
+            int sbw = 100, sbh = 28;
+            int sbx = SCREEN_W - sbw - 10;
+            int sby = SCREEN_H - sbh - 10;
+            bool hitSpin = (tx >= sbx && tx <= sbx + sbw &&
+                           ty >= sby && ty <= sby + sbh);
+            if (hitSpin && !slotsIsSpinning() &&
+                (g_slots.phase == SLOT_IDLE || g_slots.phase == SLOT_EVALUATE)) {
+                uint8_t bet = SLOT_BETS[g_slots.betIdx];
+                if (credits < bet) canSpin = false;
+            }
+
+            if (canSpin) {
+                SlotsPhase prevPhase = g_slots.phase;
+                bool changed = slotsTap(tft, tx, ty);
+
+                if (changed) {
+                    // Deduct bet when spin starts
+                    if (prevPhase != SLOT_SPINNING && g_slots.phase == SLOT_SPINNING) {
+                        uint8_t bet = SLOT_BETS[g_slots.betIdx];
+                        credits -= bet;
+                        saveCredits();
+                    }
+                    // Collect win when returning to IDLE with winnings
+                    if (g_slots.phase == SLOT_IDLE && g_slots.winAmount > 0) {
+                        credits += g_slots.winAmount;
+                        g_slots.winAmount = 0;
+                        saveCredits();
+                    }
+                    redrawAll();
+                }
+            }
+        }
+
+        delay(40);
+        return;
+    }
+
     // ── Theme cycle: tap theme name in credits area ─────────────────
     if (gamePhase == 0 && tx > RIGHT_X && ty < 30) {
         themeNext();
@@ -1481,9 +1562,9 @@ void loop() {
     // ── Phase 0 / 4: Deal or New Game ───────────────────────────────
     if (gamePhase == 0 || gamePhase == 4) {
         // Centered DEAL/NEW GAME button below paytable
-        int dealW = 80, dealH = 28;
+        int dealW = 65, dealH = 20;
         int dealX = SCREEN_W / 2 - dealW / 2;
-        int dealY = 102;
+        int dealY = 107;
         bool hitDeal = (tx >= dealX && tx <= dealX + dealW &&
                         ty >= dealY && ty <= dealY + dealH);
         if (hitDeal || (gamePhase == 4 && hitActionButton())) {
@@ -1501,6 +1582,23 @@ void loop() {
             redrawAll();
             delay(300);
             return;
+        }
+
+        // SLOTS button
+        if (gamePhase == 0) {
+            int sx = MODE_BTN_X;
+            int sy = MODE_BTN_Y + MODE_BTN_H + 4;
+            if (tx >= sx && tx <= sx + MODE_BTN_W &&
+                ty >= sy && ty <= sy + MODE_BTN_H) {
+                gameMode = 2;
+                g_slots.phase = SLOT_IDLE;
+                g_slots.winAmount = 0;
+                g_slots.gambling = false;
+                g_slots.gambleAmount = 0;
+                redrawAll();
+                delay(300);
+                return;
+            }
         }
     }
 

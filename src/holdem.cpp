@@ -12,7 +12,17 @@ const char* g_hmStatuses[HM_STATUS_COUNT] = {
     "Reading your soul...",
     "Is sweating...",
     "Flipping a coin...",
-    "Asking ChatGPT..."
+    "Asking ChatGPT...",
+    "Thinks your soft...",
+    "Buffering courage...",
+    "Summoning luck gods...",
+    "Eyeing your stack...",
+    "Bluff detection ON...",
+    "Loading excuses...",
+    "Nano-second decision...",
+    "Pocket aces? Nah...",
+    "Rehearsing victory speech...",
+    "Sending bad beat..."
 };
 
 HoldemState g_hm;
@@ -176,8 +186,8 @@ void holdemAIAct() {
                 snprintf(g_hm.aiLastAction, sizeof(g_hm.aiLastAction), "checks");
         }
     } else if (mediumHand) {
-        // Call 70%, raise 20%, fold 10%
-        if (rng < 70) {
+        // Call 75%, raise 20%, fold 5%
+        if (rng < 75) {
             if (toCall > 0) {
                 g_hm.aiStack -= toCall;
                 g_hm.aiBet += toCall;
@@ -185,7 +195,7 @@ void holdemAIAct() {
             } else {
                 snprintf(g_hm.aiLastAction, sizeof(g_hm.aiLastAction), "checks");
             }
-        } else if (rng < 90 && g_hm.aiStack > g_hm.currentBet * 2) {
+        } else if (rng < 95 && g_hm.aiStack > g_hm.currentBet * 2) {
             unsigned long raise = g_hm.currentBet * 2;
             if (raise > g_hm.aiStack) raise = g_hm.aiStack;
             g_hm.aiStack -= (raise - g_hm.aiBet);
@@ -198,8 +208,9 @@ void holdemAIAct() {
             snprintf(g_hm.aiLastAction, sizeof(g_hm.aiLastAction), "folds");
         }
     } else {
-        // Weak hand: fold 50%, call/bluff 50%
-        if (rng < 50 && toCall > 0) {
+        // Weak hand: fold only if toCall is significant (30%), call/bluff 70%
+        bool bigBet = (toCall > g_hm.pot / 2);  // only fold weak hands to big bets
+        if (rng < 30 && toCall > 0 && bigBet) {
             g_hm.aiFolded = true;
             snprintf(g_hm.aiLastAction, sizeof(g_hm.aiLastAction), "folds");
         } else {

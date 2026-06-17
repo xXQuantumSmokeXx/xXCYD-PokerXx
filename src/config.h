@@ -55,15 +55,15 @@
 #define PAYTABLE_X      PT_X
 
 // Right panel
-#define RIGHT_X         195
+#define RIGHT_X         200
 #define RIGHT_W         (SCREEN_W - RIGHT_X - 8)
 #define CREDITS_CX      (RIGHT_X + RIGHT_W / 2)
 
 // Action button
-#define BTN_X           RIGHT_X + 13
-#define BTN_W           90
+#define BTN_X           RIGHT_X + 18
+#define BTN_W           76
 #define BTN_Y           58
-#define BTN_H           32
+#define BTN_H           20
 
 // Gamble buttons (phase 3)
 #define GMBL_X          BTN_X
@@ -129,10 +129,10 @@ static const uint16_t PAYOUTS[] = {1000, 500, 100, 40, 10, 7, 5, 3, 2, 1};
 #define HM_BTN_H         24
 
 // Mode toggle button (same style as action button)
-#define MODE_BTN_X       BTN_X
-#define MODE_BTN_W       BTN_W
+#define MODE_BTN_X       (BTN_X + 10)
+#define MODE_BTN_W       76
 #define MODE_BTN_Y       58    // top of right panel, where action button was
-#define MODE_BTN_H       32   // same height as BTN_H
+#define MODE_BTN_H       20
 
 // Hold'em back-to-video-poker button (top-left corner)
 #define HM_BACK_X        4

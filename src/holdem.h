@@ -25,7 +25,7 @@ enum HoldemStage : uint8_t {
 };
 
 // ── AI status messages ─────────────────────────────────────────────────────
-#define HM_STATUS_COUNT  10
+#define HM_STATUS_COUNT  20
 extern const char* g_hmStatuses[HM_STATUS_COUNT];
 
 // ── Hold'em state ──────────────────────────────────────────────────────────

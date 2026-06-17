@@ -1,20 +1,14 @@
 # xXCYD-PokerXx
 
-Two poker games for the ESP32-32E (1-USB) and 2USB CYD (Cheap Yellow Display) — classic 5-Card Draw Joker Poker and heads-up Texas Hold'em against xXSmokeXx (AI).
+Two poker games + slots for the ESP32-32E (1-USB) and 2USB CYD (Cheap Yellow Display) — classic 5-Card Draw Joker Poker, heads-up Texas Hold'em against xXSmokeXx (AI), and a 3-reel poker-suit slot machine.
 
 [![Support on Patreon](https://img.shields.io/badge/Support-Patreon-orange)](https://www.patreon.com/c/xXQuantumSmokeXx)
 
-## Version 1.1.0
-
-Universal 2-USB compatibility release — calibration system ported from [xXCYD-WeatherXx](https://github.com/xXQuantumSmokeXx/xXCYD-Weather-StationXx) v1.1.8.
-
-Both 1USB and 2USB firmware use **TFT_eSPI ILI9341** — the same proven driver as CYD-Weather. On first boot, interactive calibration screens let you match your panel's display and touch orientation — identical to the CYD-Weather v1.1.8 calibration flow.
-
 ## Screens
 
-| Video Poker | Texas Hold'em |
-|-------------|---------------|
-| ![Video Poker](VideoPoker.png) | ![Texas Hold'em](Holdem.png) |
+| Video Poker | Texas Hold'em | Slots |
+|-------------|---------------|-------|
+| ![Video Poker](Screenshots/Main-Screen.png) | ![Texas Hold'em](Screenshots/Texas-Hold'em.png) | ![Slots](Screenshots/Slot-Machine.png) |
 
 ### Features
 
@@ -28,19 +22,26 @@ Both 1USB and 2USB firmware use **TFT_eSPI ILI9341** — the same proven driver 
 - Heads-up against xXSmokeXx AI with fixed blinds (2/5)
 - Full betting rounds: pre-flop → flop → turn → river
 - Fold, Check/Call, and Raise actions with side buttons
-- AI evaluates hand strength and occasionally bluffs
-- Rotating AI status messages ("Rigging Algorithms...", "Consulting the void...", etc.)
+- AI adapts to hand strength — calls/bluffs more, folds less against small bets
+- 20 rotating AI status messages ("Rigging Algorithms...", "Thinks your soft...", etc.)
 - Persistent chip stacks — survive power cycles and game mode switches
 
+**Slots:**
+- 3-reel slot machine with poker-suit symbols (♠♥♦♣★7)
+- Single payline, 6 winning combinations from Any Pair (2×) to ★★★ Jackpot (100×)
+- Variable bet (1/3/5/10 credits), gamble/double feature on wins
+- Animated reel spin with staggered stops and deceleration
+- On-screen paytable with all 6 payouts
+
 **General:**
-- 9 theme accent colors (CYAN, GREEN, RED, ORANGE, YELLOW, GRAY, PURPLE, PINK, WHITE) — saved to NVS
-- Credit persistence — score survives power cycles and deep sleep
+- 9 theme accent colors — saved to NVS
+- Credit persistence across all three games — survives power cycles and deep sleep
 - Tap theme name in the credits panel to cycle themes
 - Power button (top-right) — tap for deep sleep, touch screen to wake
-- RESET button in Hold'em — reset all scores to defaults
-- Mode toggle button switches between Video Poker and Texas Hold'em
-- Serial screenshot capture via RGB332 protocol (compatible with xXCYD-ScreenCaptureXx)
-- Custom geometric card art — all drawn with TFT_eSPI/LovyanGFX primitives, no bitmaps
+- RESET button in Hold'em resets all scores to defaults
+- Mode toggle buttons: VIDEO POKER, HOLD'EM, SLOTS
+- Serial screenshot capture via RGB332 protocol (`screenshot.py` included)
+- Custom geometric card and symbol art — all drawn with TFT_eSPI primitives, no bitmaps
 
 ### Setup
 
