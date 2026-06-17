@@ -336,7 +336,7 @@ static void drawSmallCardFace(int x, int y, uint8_t card) {
     disp->drawString(rankStr(rank), x + HCARD_W - 3, y + HCARD_H - 2);
 
     // Center suit
-    drawSuitSymbol(tft, x + HCARD_W/2, y + HCARD_H/2 + 2, 12, suit);
+    drawSuitSymbol(*disp, x + HCARD_W/2, y + HCARD_H/2 + 2, 12, suit);
 }
 
 static void drawSmallCardBack(int x, int y) {
@@ -443,7 +443,7 @@ static void drawHoldemScreen() {
             disp->drawString(rankStr(rank), cx + 3, commY + 3);
             disp->setTextDatum(BR_DATUM);
             disp->drawString(rankStr(rank), cx + HCCARD_W - 3, commY + HCCARD_H - 3);
-            drawSuitSymbol(tft, cx + HCCARD_W/2, commY + HCCARD_H/2 + 2, 14, suit);
+            drawSuitSymbol(*disp, cx + HCCARD_W/2, commY + HCCARD_H/2 + 2, 14, suit);
         } else if (g_hm.stage >= HM_PREFLOP) {
             disp->fillRoundRect(cx, commY, HCCARD_W, HCCARD_H, 4, fill);
             disp->drawRoundRect(cx, commY, HCCARD_W, HCCARD_H, 4, g_themeColor);
@@ -586,19 +586,24 @@ static void drawHoldemScreen() {
 
 // ── Full redraw ────────────────────────────────────────────────────────────
 
-static void redrawAll() {
+static void redrawAll(TFT_eSPI &d);  // forward
+static void redrawAll() { redrawAll(*disp); }
+static void redrawAll(TFT_eSPI &d) {
+    // Save/restore disp so existing code still works via the global
+    auto *prev = disp; disp = &d;
+
     if (gameMode == 1) {
         drawHoldemScreen();
-        return;
+        disp = prev; return;
     }
 
     if (gameMode == 2) {
-        slotsDraw(*disp, credits);
+        slotsDraw(d, credits);
         drawPowerButton();
-        return;
+        disp = prev; return;
     }
 
-    disp->fillScreen(COL_BG);
+    d.fillScreen(COL_BG);
 
     drawPayTable();
     drawCredits();
@@ -638,8 +643,8 @@ static void redrawAll() {
         disp->fillRect(0, CARD_Y - 2, SCREEN_W, CARD_H + 20, COL_BG);
         for (int i = 0; i < 5; i++) {
             int cx = PAYTABLE_X + i * CARD_GAP;
-            drawCardFace(tft, cx, CARD_Y, hand[i]);
-            drawHoldFrame(tft, i, hold[i], false);
+            drawCardFace(*disp, cx, CARD_Y, hand[i]);
+            drawHoldFrame(*disp, i, hold[i], false);
         }
 
     } else if (gamePhase == 2) {
@@ -655,7 +660,7 @@ static void redrawAll() {
         drawGambleButtons();
         drawMessage("PICK  LOW  OR  HIGH  .  COLLECT  TO  KEEP", g_themeColor);
         disp->fillRect(0, CARD_Y - 2, SCREEN_W, CARD_H + 20, COL_BG);
-        drawCardBack(tft, PT_X + 2 * CARD_GAP, CARD_Y);
+        drawCardBack(*disp, PT_X + 2 * CARD_GAP, CARD_Y);
 
     } else if (gamePhase == 4) {
         clearWinBox();
@@ -667,6 +672,7 @@ static void redrawAll() {
         drawMessage("PRESS  NEW  GAME  TO  CONTINUE", g_themeColor);
         disp->fillRect(0, CARD_Y - 2, SCREEN_W, CARD_H + 20, COL_BG);
     }
+    disp = prev;
 }
 
 // ── Theme notification ─────────────────────────────────────────────────────
@@ -699,12 +705,12 @@ static void dealHand() {
     }
     for (int i = 0; i < 5; i++) {
         int cx = PAYTABLE_X + i * CARD_GAP;
-        if (!hold[i]) drawCardBack(tft, cx, CARD_Y);
-        drawHoldFrame(tft, i, hold[i], true);
+        if (!hold[i]) drawCardBack(*disp, cx, CARD_Y);
+        drawHoldFrame(*disp, i, hold[i], true);
     }
     for (int i = 0; i < 5; i++) {
         int cx = PAYTABLE_X + i * CARD_GAP;
-        drawCardFace(tft, cx, CARD_Y, hand[i]);
+        drawCardFace(*disp, cx, CARD_Y, hand[i]);
         if (disp == &tft) delay(50);
     }
 }
@@ -772,7 +778,7 @@ static void startBet() {
     drawGambleButtons();
     drawMessage("PICK  LOW  OR  HIGH  .  COLLECT  TO  KEEP", g_themeColor);
     dice = 0;
-    drawCardBack(tft, PT_X + 2 * CARD_GAP, CARD_Y);
+    drawCardBack(*disp, PT_X + 2 * CARD_GAP, CARD_Y);
     gamePhase = 3;
 }
 
@@ -883,7 +889,7 @@ static void evaluateWin(bool doHold) {
             } else if (maximum <= 10 && pair1 == 0 && r == 1 && win == 9) {
                 hold[i] = true;
             }
-            drawHoldFrame(tft, i, hold[i], false);
+            drawHoldFrame(*disp, i, hold[i], false);
         }
     }
 
@@ -897,14 +903,11 @@ static void handleSerialCapture() {
     spr.setColorDepth(8);
     uint8_t *fb = (uint8_t *)spr.createSprite(SCREEN_W, SCREEN_H);
     if (!fb) {
-        Serial.print("OOM:");
-        Serial.println(ESP.getMaxAllocHeap());
+        Serial.print("OOM:"); Serial.println(ESP.getMaxAllocHeap());
         return;
     }
-    auto *prev = disp;
-    disp = &spr;
-    redrawAll();
-    disp = prev;
+    // Pass sprite directly — matches cyd-weather's proven capture pattern
+    redrawAll(spr);
     Serial.print("RGB332:");
     Serial.write(fb, SCREEN_W * SCREEN_H);
     Serial.flush();
@@ -1095,7 +1098,7 @@ static void showSplash() {
         disp->drawString("A", cx + cardW/2, cy + cardH/2 - 4);
 
         // Suit symbol
-        drawSuitSymbol(tft, cx + cardW/2, cy + cardH/2 + 20, 16, suit);
+        drawSuitSymbol(*disp, cx + cardW/2, cy + cardH/2 + 20, 16, suit);
     }
 
     // ── Branding ──
@@ -1516,8 +1519,8 @@ void loop() {
             int cx = PAYTABLE_X + i * CARD_GAP;
             if (tx > cx - 5 && tx < cx + CARD_W + 5 && ty > CARD_Y - 10) {
                 hold[i] = !hold[i];
-                drawCardFace(tft, cx, CARD_Y, hand[i]);
-                drawHoldFrame(tft, i, hold[i], false);
+                drawCardFace(*disp, cx, CARD_Y, hand[i]);
+                drawHoldFrame(*disp, i, hold[i], false);
                 delay(200);
                 break;
             }
@@ -1545,14 +1548,14 @@ void loop() {
             int dx = 6 + 11 * (dice % 14) + 2 * (dice / 14);
             int dy = CARD_Y + 2 * (dice / 14);
             uint8_t card = 4 + random(24) + 28 * (r ^ h);
-            drawCardFace(tft, dx, dy, card);
+            drawCardFace(*disp, dx, dy, card);
             delay(400);
             dice++;
             if (r == 1) {
                 takeMoneyAndRun();
             } else {
                 updatePayout();
-                drawCardBack(tft, dx, dy);
+                drawCardBack(*disp, dx, dy);
             }
             delay(200);
             return;

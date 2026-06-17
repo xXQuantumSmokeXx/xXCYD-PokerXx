@@ -129,7 +129,7 @@ static const uint16_t PAYOUTS[] = {1000, 500, 100, 40, 10, 7, 5, 3, 2, 1};
 #define HM_BTN_H         24
 
 // Mode toggle button (same style as action button)
-#define MODE_BTN_X       (BTN_X + 10)
+#define MODE_BTN_X       BTN_X
 #define MODE_BTN_W       76
 #define MODE_BTN_Y       58    // top of right panel, where action button was
 #define MODE_BTN_H       20
