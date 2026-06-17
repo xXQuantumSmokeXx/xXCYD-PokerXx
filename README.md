@@ -8,7 +8,7 @@ Two poker games + slots for the ESP32-32E (1-USB) and 2USB CYD (Cheap Yellow Dis
 
 | Video Poker | Texas Hold'em | Slots |
 |-------------|---------------|-------|
-| ![Video Poker](Screenshots/Main-Screen.png) | ![Texas Hold'em](Screenshots/Texas-Hold'em.png) | ![Slots](Screenshots/Slot-Machine.png) |
+| ![Video Poker](https://raw.githubusercontent.com/xXQuantumSmokeXx/xXCYD-PokerXx/v1.2.0/Screenshots/Main-Screen.png) | ![Texas Hold'em](https://raw.githubusercontent.com/xXQuantumSmokeXx/xXCYD-PokerXx/v1.2.0/Screenshots/Texas-Hold'em.png) | ![Slots](https://raw.githubusercontent.com/xXQuantumSmokeXx/xXCYD-PokerXx/v1.2.0/Screenshots/Slot-Machine.png) |
 
 ### Features
 
