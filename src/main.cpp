@@ -336,7 +336,7 @@ static void drawSmallCardFace(int x, int y, uint8_t card) {
     disp->drawString(rankStr(rank), x + HCARD_W - 3, y + HCARD_H - 2);
 
     // Center suit
-    drawSuitSymbol(*disp, x + HCARD_W/2, y + HCARD_H/2 + 2, 12, suit);
+    drawSuitSymbol(*disp, x + HCARD_W/2, y + HCARD_H/2 + 2, 16, suit);
 }
 
 static void drawSmallCardBack(int x, int y) {
@@ -443,7 +443,7 @@ static void drawHoldemScreen() {
             disp->drawString(rankStr(rank), cx + 3, commY + 3);
             disp->setTextDatum(BR_DATUM);
             disp->drawString(rankStr(rank), cx + HCCARD_W - 3, commY + HCCARD_H - 3);
-            drawSuitSymbol(*disp, cx + HCCARD_W/2, commY + HCCARD_H/2 + 2, 14, suit);
+            drawSuitSymbol(*disp, cx + HCCARD_W/2, commY + HCCARD_H/2 + 2, 18, suit);
         } else if (g_hm.stage >= HM_PREFLOP) {
             disp->fillRoundRect(cx, commY, HCCARD_W, HCCARD_H, 4, fill);
             disp->drawRoundRect(cx, commY, HCCARD_W, HCCARD_H, 4, g_themeColor);
@@ -1098,7 +1098,7 @@ static void showSplash() {
         disp->drawString("A", cx + cardW/2, cy + cardH/2 - 4);
 
         // Suit symbol
-        drawSuitSymbol(*disp, cx + cardW/2, cy + cardH/2 + 20, 16, suit);
+        drawSuitSymbol(*disp, cx + cardW/2, cy + cardH/2 + 17, 20, suit);
     }
 
     // ── Branding ──

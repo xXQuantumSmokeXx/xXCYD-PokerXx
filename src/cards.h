@@ -13,40 +13,54 @@ inline const char* rankStr(uint8_t rank) {
     return "?";
 }
 
-// ── Suit symbols — outline-only (no fills). ────────────────────────────────
+// ── Suit symbols — bold outlined (double-stroke) for thick lines, clear shape ─
 static void drawHeart(TFT_eSPI &tft, int cx, int cy, int sz, uint16_t color) {
     int r = sz * 3 / 10; if (r < 3) r = 3;
-    tft.drawCircle(cx - r + 1, cy - r + 2, r, color);
-    tft.drawCircle(cx + r - 1, cy - r + 2, r, color);
     int halfW = r * 2;
-    tft.drawLine(cx - halfW, cy - r + 2, cx, cy + sz/2 + 1, color);
-    tft.drawLine(cx + halfW, cy - r + 2, cx, cy + sz/2 + 1, color);
-    tft.drawLine(cx - r, cy - r + 2, cx + r, cy - r + 2, color);
+    for (int o = 0; o < 2; o++) {
+        int ox = o, oy = o;
+        tft.drawCircle(cx - r + 1 + ox, cy - r + 2 + oy, r, color);
+        tft.drawCircle(cx + r - 1 + ox, cy - r + 2 + oy, r, color);
+        tft.drawLine(cx - halfW + ox, cy - r + 2 + oy, cx + ox, cy + sz/2 + 1 + oy, color);
+        tft.drawLine(cx + halfW + ox, cy - r + 2 + oy, cx + ox, cy + sz/2 + 1 + oy, color);
+    }
 }
 static void drawDiamond(TFT_eSPI &tft, int cx, int cy, int sz, uint16_t color) {
-    tft.drawLine(cx, cy - sz/2, cx + sz/2, cy, color);
-    tft.drawLine(cx + sz/2, cy, cx, cy + sz/2, color);
-    tft.drawLine(cx, cy + sz/2, cx - sz/2, cy, color);
-    tft.drawLine(cx - sz/2, cy, cx, cy - sz/2, color);
+    int half = sz / 2;
+    for (int o = 0; o < 2; o++) {
+        int ox = o, oy = o;
+        tft.drawLine(cx + ox, cy - half + oy, cx + half + ox, cy + oy, color);
+        tft.drawLine(cx + half + ox, cy + oy, cx + ox, cy + half + oy, color);
+        tft.drawLine(cx + ox, cy + half + oy, cx - half + ox, cy + oy, color);
+        tft.drawLine(cx - half + ox, cy + oy, cx + ox, cy - half + oy, color);
+    }
 }
 static void drawClub(TFT_eSPI &tft, int cx, int cy, int sz, uint16_t color) {
     int r = sz * 2 / 9; if (r < 2) r = 2;
-    tft.drawCircle(cx, cy - r, r + 1, color);
-    tft.drawCircle(cx - r, cy + r - 1, r, color);
-    tft.drawCircle(cx + r, cy + r - 1, r, color);
-    tft.drawLine(cx, cy + r + 1, cx, cy + r + 1 + sz/2, color);
-    tft.drawLine(cx - 2, cy + r + 1 + sz/2, cx + 2, cy + r + 1 + sz/2, color);
+    int stemBot = cy + r + 1 + sz/3;
+    for (int o = 0; o < 2; o++) {
+        int ox = o, oy = o;
+        tft.drawCircle(cx + ox, cy - r + oy, r + 1, color);
+        tft.drawCircle(cx - r - 1 + ox, cy + r - 1 + oy, r, color);
+        tft.drawCircle(cx + r + 1 + ox, cy + r - 1 + oy, r, color);
+        tft.drawLine(cx + ox, cy + r + oy, cx + ox, stemBot + oy, color);
+        tft.drawLine(cx - 2 + ox, stemBot + oy, cx + 2 + ox, stemBot + oy, color);
+    }
 }
 static void drawSpade(TFT_eSPI &tft, int cx, int cy, int sz, uint16_t color) {
     int r = sz * 3 / 10; if (r < 3) r = 3;
-    tft.drawLine(cx, cy - sz/2, cx - r + 1, cy - r, color);
-    tft.drawLine(cx, cy - sz/2, cx + r - 1, cy - r, color);
-    tft.drawCircle(cx - r, cy + 1, r, color);
-    tft.drawCircle(cx + r, cy + 1, r, color);
-    tft.drawLine(cx - r, cy - r, cx + r, cy - r, color);
-    tft.drawLine(cx, cy + r + 1, cx, cy + r + 1 + sz/2 + 1, color);
-    tft.drawLine(cx - 2, cy + r + 1 + sz/2 + 1, cx + 2, cy + r + 1 + sz/2 + 1, color);
+    int stemBot = cy + r + 1 + sz/3 + 1;
+    for (int o = 0; o < 2; o++) {
+        int ox = o, oy = o;
+        tft.drawLine(cx + ox, cy - sz/2 + oy, cx - r + 1 + ox, cy - r + oy, color);
+        tft.drawLine(cx + ox, cy - sz/2 + oy, cx + r - 1 + ox, cy - r + oy, color);
+        tft.drawCircle(cx - r + ox, cy + 1 + oy, r, color);
+        tft.drawCircle(cx + r + ox, cy + 1 + oy, r, color);
+        tft.drawLine(cx + ox, cy + r + oy, cx + ox, stemBot + oy, color);
+        tft.drawLine(cx - 2 + ox, stemBot + oy, cx + 2 + ox, stemBot + oy, color);
+    }
 }
+
 static void drawSuitSymbol(TFT_eSPI &tft, int cx, int cy, int sz, uint8_t suit) {
     uint16_t col = g_themeColor;
     switch (suit) {
@@ -93,7 +107,7 @@ static void drawCardFace(TFT_eSPI &tft, int x, int y, uint8_t card) {
     tft.setTextFont(2); tft.setTextColor(g_themeColor, COL_BG);
     tft.setTextDatum(TL_DATUM);
     tft.drawString(rankStr(rank), x + 5, y + 3);
-    drawSuitSymbol(tft, x + CARD_W/2, y + CARD_H/2 + 3, 20, suit);
+    drawSuitSymbol(tft, x + CARD_W/2, y + CARD_H/2 + 3, 24, suit);
     tft.setTextDatum(BR_DATUM);
     tft.drawString(rankStr(rank), x + CARD_W - 5, y + CARD_H - 3);
 }

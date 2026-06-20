@@ -43,11 +43,9 @@ SlotsState g_slots;
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 static uint16_t symColor(uint8_t sym) {
-    switch (sym) {
-        case SYM_WILD:  return COL_GOLD;
-        case SYM_SEVEN: return COL_RED;
-        default:        return g_themeColor;
-    }
+    // All symbols follow the active theme color
+    (void)sym;
+    return g_themeColor;
 }
 
 // Draw one symbol inside a reel cell
@@ -68,9 +66,9 @@ static void drawReelSymbol(TFT_eSPI &tft, int x, int y, int w, int h, uint8_t sy
         tft.setTextFont(4);
         tft.setTextColor(col, bg);
         tft.setTextDatum(MC_DATUM);
-        tft.drawString("7", cx, cy);
+        tft.drawString("7", cx, cy + 2);
     } else {
-        drawSuitSymbol(tft, cx, cy + 2, 16, sym);
+        drawSuitSymbol(tft, cx, cy + 2, 17, sym);
     }
 }
 
@@ -105,7 +103,7 @@ static void drawMiniPaytable(TFT_eSPI &tft) {
         { SYM_SEVEN,   50 },   // right bottom
     };
 
-    int ew = 86, eh = 16;   // entry box size
+    int ew = 86, eh = 24;   // entry box size
     int gap = 6;
     int cols = 3;
     int totalW = cols * ew + (cols - 1) * gap;  // 3*86 + 2*6 = 270
@@ -116,7 +114,7 @@ static void drawMiniPaytable(TFT_eSPI &tft) {
         int col = i % cols;
         int row = i / cols;
         int ex = x0 + col * (ew + gap);
-        int ey = SLOT_PAY_Y + row * (eh + 4);
+        int ey = SLOT_PAY_Y - 6 + row * (eh + 4);
 
         // Draw entry background
         tft.fillRoundRect(ex, ey, ew, eh, 3, COL_BG);
@@ -124,14 +122,22 @@ static void drawMiniPaytable(TFT_eSPI &tft) {
 
         uint16_t sc = symColor(entries[i].sym);
 
-        // Draw 3 tiny suit symbols (or "7" for seven)
-        bool isSmall = (entries[i].mult == 25);  // 25-box: smaller symbols
-        int symOffset = isSmall ? -5 : 0;
-        int symSz = isSmall ? 6 : 8;
-        int starSz = isSmall ? 5 : 7;
+        // Draw 3 suit symbols (or "7" or star)
+        int symSz = 10;
+        int starSz = 8;
+        // Per-entry fine-tuning offsets
+        int px = 0, py = -3;
+        switch (entries[i].mult) {
+            case 15: py += 2; px += 2; break;  // diamonds: down 2, right 2
+            case 25: px += 2;          break;  // spades: right 2
+            case 100: py += 2; px += 2; break;  // stars: down 2, right 2
+            case 10: py += 2; px += 2; break;  // clubs: down 2, right 2
+            case 20: py += 2;          break;  // hearts: down 2
+            case 50: py += 3; px += 2; break;  // sevens: down 3, right 2
+        }
         for (int j = 0; j < 3; j++) {
-            int sx = ex + 8 + j * 18;
-            int sy = ey + eh / 2 + symOffset;
+            int sx = ex + 8 + j * 18 + px;
+            int sy = ey + eh / 2 + py;
             if (entries[i].sym == SYM_WILD) {
                 drawStar(tft, sx, sy, starSz, sc);
             } else if (entries[i].sym == SYM_SEVEN) {
@@ -146,7 +152,7 @@ static void drawMiniPaytable(TFT_eSPI &tft) {
 
         // Payout number
         tft.setTextFont(1);
-        tft.setTextColor(COL_WHITE, COL_BG);
+        tft.setTextColor(g_themeColor, COL_BG);
         tft.setTextDatum(MR_DATUM);
         char buf[6];
         snprintf(buf, sizeof(buf), "%u", entries[i].mult);
@@ -175,7 +181,7 @@ static void drawTopBar(TFT_eSPI &tft, unsigned long creds) {
 static void drawBetButton(TFT_eSPI &tft, bool spinning) {
     int bw = 100, bh = 28;
     int bx = 10;                  // 10px from left
-    int by = SCREEN_H - bh - 10;  // 10px from bottom
+    int by = SCREEN_H - bh - 8;  // 10px from bottom
 
     tft.fillRoundRect(bx, by, bw, bh, 5, COL_BG);
     uint16_t col = spinning ? COL_DIM_GRAY : g_themeColor;
@@ -194,7 +200,7 @@ static void drawBetButton(TFT_eSPI &tft, bool spinning) {
 static void drawSpinButton(TFT_eSPI &tft, bool spinning, unsigned long credits) {
     int bw = 100, bh = 28;
     int bx = SCREEN_W - bw - 10;  // 10px from right
-    int by = SCREEN_H - bh - 10;  // 10px from bottom
+    int by = SCREEN_H - bh - 8;  // 10px from bottom
 
     bool canSpin = !spinning && credits >= SLOT_BETS[g_slots.betIdx];
     uint16_t col = canSpin ? g_themeColor : COL_DIM_GRAY;
@@ -218,7 +224,7 @@ static void drawWinMessage(TFT_eSPI &tft) {
     tft.setTextDatum(TC_DATUM);
 
     if (g_slots.winAmount > 0) {
-        tft.setTextColor(COL_GOLD, COL_BG);
+        tft.setTextColor(g_themeColor, COL_BG);
         char buf[40];
         snprintf(buf, sizeof(buf), "%s  +%lu", g_slots.winLabel, g_slots.winAmount);
         tft.drawString(buf, SCREEN_W / 2, msgY);
@@ -233,7 +239,7 @@ static void drawGambleUI(TFT_eSPI &tft) {
     // Buttons positioned above the bottom row
     int btnW = 100, btnH = 28;
     int btnX = SCREEN_W / 2 - btnW / 2;
-    int baseY = SCREEN_H - btnH - 10;  // same row as SPIN
+    int baseY = SCREEN_H - btnH - 8;  // same row as SPIN
 
     // COLLECT button (centered, above LOW/HIGH)
     int cy = baseY - btnH - 8;
@@ -267,7 +273,7 @@ static void drawGambleUI(TFT_eSPI &tft) {
 
     // Gamble pot display above the card
     tft.setTextFont(2);
-    tft.setTextColor(COL_GOLD, COL_BG);
+    tft.setTextColor(g_themeColor, COL_BG);
     tft.setTextDatum(TC_DATUM);
     snprintf(buf, sizeof(buf), "POT: %lu", g_slots.gambleAmount);
     tft.drawString(buf, SCREEN_W / 2, cardY - 12);
@@ -397,7 +403,7 @@ bool slotsTap(TFT_eSPI &tft, int16_t tx, int16_t ty) {
     if (g_slots.gambling) {
         int btnW = 100, btnH = 28;
         int btnX = SCREEN_W / 2 - btnW / 2;
-        int baseY = SCREEN_H - btnH - 10;
+        int baseY = SCREEN_H - btnH - 8;
 
         // COLLECT button (above LOW/HIGH)
         int cy = baseY - btnH - 8;
@@ -460,7 +466,7 @@ bool slotsTap(TFT_eSPI &tft, int16_t tx, int16_t ty) {
     // ── Bet button ───────────────────────────────────────────────────
     int bw = 100, bh = 28;
     int bx = 10;
-    int by = SCREEN_H - bh - 10;
+    int by = SCREEN_H - bh - 8;
     if (tx >= bx && tx <= bx + bw && ty >= by && ty <= by + bh) {
         g_slots.betIdx = (g_slots.betIdx + 1) % SLOT_BET_COUNT;
         if (g_slots.phase == SLOT_EVALUATE) {
@@ -473,7 +479,7 @@ bool slotsTap(TFT_eSPI &tft, int16_t tx, int16_t ty) {
     // ── SPIN button (bottom-right corner) ─────────────────────────────
     int sbw = 100, sbh = 28;
     int sbx = SCREEN_W - sbw - 10;
-    int sby = SCREEN_H - sbh - 10;
+    int sby = SCREEN_H - sbh - 8;
     if (tx >= sbx && tx <= sbx + sbw && ty >= sby && ty <= sby + sbh) {
         uint8_t bet = SLOT_BETS[g_slots.betIdx];
         // Credit check handled by caller (main.cpp reads credits)
