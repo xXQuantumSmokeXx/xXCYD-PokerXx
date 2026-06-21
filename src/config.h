@@ -84,6 +84,27 @@
 #define PWR_BTN_Y       10
 #define PWR_BTN_R       7
 
+// Settings gear icon (below power button)
+#define GEAR_BTN_X      306
+#define GEAR_BTN_Y      29
+#define GEAR_BTN_R      5
+
+// ── Settings screen layout ─────────────────────────────────────────────────
+#define SET_LIST_X      12
+#define SET_LIST_Y      36
+#define SET_LIST_W      (SCREEN_W - 24)
+#define SET_ROW_H       30
+#define SET_ROW_GAP     4
+#define SET_LABEL_X     (SET_LIST_X + 4)
+#define SET_VAL_W       72
+#define SET_VAL_H       22
+#define SET_VAL_X       (SET_LIST_X + SET_LIST_W - SET_VAL_W - 4)
+#define SET_BACK_X      4
+#define SET_BACK_Y      1
+#define SET_BACK_W      64
+#define SET_BACK_H      18
+#define SET_REFILL_BTN_Y  210
+
 #define CARD_W          56
 #define CARD_H          82
 #define CARD_GAP        62

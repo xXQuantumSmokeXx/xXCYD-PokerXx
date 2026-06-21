@@ -16,6 +16,7 @@ static TFT_eSPI    *disp = &tft;  // drawing target — normally &tft, swapped t
 #include "cards.h"
 #include "holdem.h"
 #include "slots.h"
+#include "settings.h"
 
 static SPIClass    touchSPI(VSPI);
 static XPT2046_Touchscreen ts(TOUCH_CS);
@@ -111,8 +112,8 @@ static void saveCredits() {
 static void loadCredits() {
     Preferences prefs;
     prefs.begin("cyd-poker", true);
-    credits = prefs.getULong("credits", STARTING_CREDITS);
-    if (credits < BET) credits = STARTING_CREDITS;  // ensure playable
+    credits = prefs.getULong("credits", g_settings.startingCredits);
+    if (credits < BET) credits = g_settings.startingCredits;  // ensure playable
     prefs.end();
 }
 
@@ -199,6 +200,7 @@ static void drawCredits() {
     disp->setTextDatum(TC_DATUM);
     disp->drawString(buf, CREDITS_CX, 24);
     drawPowerButton();  // restore after clearing right panel
+    settingsDrawGearIcon(*disp);
 }
 
 // ── Action button (right panel) ────────────────────────────────────────────
@@ -354,6 +356,7 @@ static void drawHoldemScreen() {
     char buf[40];
 
     drawPowerButton();
+    settingsDrawGearIcon(*disp);
 
     // ── Back to Video Poker button (top-left) ──
     {
@@ -422,6 +425,7 @@ static void drawHoldemScreen() {
     disp->drawString(buf, SCREEN_W - 4, aiY + 36);
 
     drawPowerButton();
+    settingsDrawGearIcon(*disp);
 
     // ── Community cards (bigger than hole cards) ──
     int ccGap = 57;  // tight spacing for 5 big cards
@@ -600,6 +604,12 @@ static void redrawAll(TFT_eSPI &d) {
     if (gameMode == 2) {
         slotsDraw(d, credits);
         drawPowerButton();
+        settingsDrawGearIcon(d);
+        disp = prev; return;
+    }
+
+    if (gameMode == 3) {
+        settingsDraw(d);
         disp = prev; return;
     }
 
@@ -1255,6 +1265,7 @@ void setup() {
     randomSeed(analogRead(34) + micros());
 
     themeInit();
+    settingsInit();
     loadCredits();
     holdemInit();
     slotsInit();
@@ -1347,6 +1358,9 @@ void loop() {
 #endif
     }
 
+    // ── Refill check (every loop iteration) ───────────────────────
+    settingsCheckRefill(credits);
+
     // ── Slots animation (runs every frame, independent of touch) ──────
     if (gameMode == 2) slotsAnimate(tft, credits);
 
@@ -1356,6 +1370,43 @@ void loop() {
     // ── Power button (any phase) ────────────────────────────────────
     if (hitPowerButton()) {
         goToSleep();
+        return;
+    }
+
+    // ── Settings gear icon (any mode) ────────────────────────────
+    if (gameMode != 3 && settingsHitGearIcon(tx, ty)) {
+        g_prevGameMode = gameMode;
+        gameMode = 3;
+        redrawAll();
+        delay(300);
+        return;
+    }
+
+    // ── Settings mode ────────────────────────────────────────────
+    if (gameMode == 3) {
+        // Check BACK button hit first — handled by settingsTap
+        if (settingsTap(tx, ty)) {
+            // Determine if it was BACK or REFILL NOW
+            if (tx >= SET_BACK_X && tx <= SET_BACK_X + SET_BACK_W &&
+                ty >= SET_BACK_Y && ty <= SET_BACK_Y + SET_BACK_H) {
+                gameMode = g_prevGameMode;
+                redrawAll();
+                delay(300);
+                return;
+            }
+            // REFILL NOW button
+            int btnW = 160, btnH = 26;
+            int btnX = (SCREEN_W - btnW) / 2;
+            if (tx >= btnX && tx <= btnX + btnW &&
+                ty >= SET_REFILL_BTN_Y && ty <= SET_REFILL_BTN_Y + btnH) {
+                settingsApplyRefill(credits);
+                saveCredits();
+            }
+            redrawAll();
+            delay(200);
+            return;
+        }
+        delay(120);
         return;
     }
 
@@ -1410,7 +1461,7 @@ void loop() {
             // RESET (bottom half of left stack)
             if (tx >= foldX && tx <= foldX + HM_SIDE_BTN_W &&
                 ty >= raiseY && ty <= raiseY + rh) {
-                credits = STARTING_CREDITS;
+                credits = g_settings.startingCredits;
                 g_hm.playerStack = HOLDEM_STARTING_STACK;
                 g_hm.aiStack = HOLDEM_STARTING_STACK;
                 g_hm.stage = HM_IDLE;
