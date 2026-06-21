@@ -356,7 +356,6 @@ static void drawHoldemScreen() {
     char buf[40];
 
     drawPowerButton();
-    settingsDrawGearIcon(*disp);
 
     // ── Back to Video Poker button (top-left) ──
     {
@@ -425,7 +424,6 @@ static void drawHoldemScreen() {
     disp->drawString(buf, SCREEN_W - 4, aiY + 36);
 
     drawPowerButton();
-    settingsDrawGearIcon(*disp);
 
     // ── Community cards (bigger than hole cards) ──
     int ccGap = 57;  // tight spacing for 5 big cards
