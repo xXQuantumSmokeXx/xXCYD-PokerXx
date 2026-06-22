@@ -110,6 +110,8 @@ Originally inspired by [Jolly-Card-Poker-CYD](https://github.com/dzulidzan/Jolly
 
 Calibration system ported from [xXCYD-WeatherXx](https://github.com/xXQuantumSmokeXx/xXCYD-Weather-StationXx).
 
+Also check out [xXCYD-BreakoutXx](https://github.com/xXQuantumSmokeXx/xXCYD-BreakoutXx) — another CYD game.
+
 Built by xXQuantum-SmokeXx, with development assistance from Codex & Claude Code.
 
 UI design ported from the "QuantumSix" "VR project", originally developed in collaboration with "Six" & "Nova"...
