@@ -1,6 +1,6 @@
 # xXCYD-PokerXx
 
-Two poker games + slots for the ESP32-32E (1-USB) and 2USB CYD (Cheap Yellow Display) — classic 5-Card Draw Joker Poker, heads-up Texas Hold'em against xXSmokeXx (AI), and a 3-reel poker-suit slot machine.
+Five games for the ESP32-32E (1-USB) and 2USB CYD (Cheap Yellow Display) — classic 5-Card Draw Joker Poker, heads-up Texas Hold'em against xXSmokeXx (AI), a 3-reel poker-suit slot machine, **Blackjack**, and **War**.
 
 [![Support on Patreon](https://img.shields.io/badge/Support-Patreon-orange)](https://www.patreon.com/c/xXQuantumSmokeXx)
 
@@ -8,7 +8,11 @@ Two poker games + slots for the ESP32-32E (1-USB) and 2USB CYD (Cheap Yellow Dis
 
 | Video Poker | Texas Hold'em | Slots |
 |-------------|---------------|-------|
-| ![Video Poker](https://raw.githubusercontent.com/xXQuantumSmokeXx/xXCYD-PokerXx/v1.2.1/Screenshots/Main-Screen.png) | ![Texas Hold'em](https://raw.githubusercontent.com/xXQuantumSmokeXx/xXCYD-PokerXx/v1.2.1/Screenshots/Texas-Hold'em.png) | ![Slots](https://raw.githubusercontent.com/xXQuantumSmokeXx/xXCYD-PokerXx/v1.2.1/Screenshots/Slot-Machine.png) |
+| ![Video Poker](https://raw.githubusercontent.com/xXQuantumSmokeXx/xXCYD-PokerXx/main/Screenshots/Main-Screen.png) | ![Texas Hold'em](https://raw.githubusercontent.com/xXQuantumSmokeXx/xXCYD-PokerXx/main/Screenshots/Texas-Hold'em.png) | ![Slots](https://raw.githubusercontent.com/xXQuantumSmokeXx/xXCYD-PokerXx/main/Screenshots/Slot-Machine.png) |
+
+| Blackjack | War |
+|-----------|-----|
+| ![Blackjack](https://raw.githubusercontent.com/xXQuantumSmokeXx/xXCYD-PokerXx/main/Screenshots/BlackJack.png) | ![War](https://raw.githubusercontent.com/xXQuantumSmokeXx/xXCYD-PokerXx/main/Screenshots/War.png) |
 
 ### Features
 
@@ -33,13 +37,29 @@ Two poker games + slots for the ESP32-32E (1-USB) and 2USB CYD (Cheap Yellow Dis
 - Animated reel spin with staggered stops and deceleration
 - On-screen paytable with all 6 payouts
 
+**Blackjack:**
+- Classic casino blackjack — player vs dealer, closest to 21 wins
+- Hit, Stand, Double Down, and Split actions with right-panel buttons
+- Dealer auto-play with animated card reveals (stands on all 17s)
+- Natural blackjack pays 3:2, adjustable bet from 5–50 credits
+- BET cycle button — tap to cycle bet amount (5→10→20→30→50→5)
+- Split pairs (including Aces — one card per Ace hand)
+
+**War:**
+- The simplest card game — flip a card against the dealer, highest wins
+- 52-card deck split 26–26, first to collect all 52 cards wins
+- WAR! on ties — 3 cards burned face-down, 4th card face-up decides the winner
+- Consecutive wars (up to 3) with accumulating pot — triple war splits the pot
+- 5 credit entry fee, 25 credit payout for winning the full game
+- Animated war sequence with timed burn-card reveals
+
 **General:**
 - 9 theme accent colors — saved to NVS
 - Credit persistence across all three games — survives power cycles and deep sleep
 - Tap theme name in the credits panel to cycle themes
 - Power button (top-right) — tap for deep sleep, touch screen to wake
 - RESET button in Hold'em resets all scores to defaults
-- Mode toggle buttons: VIDEO POKER, HOLD'EM, SLOTS
+- Mode toggle buttons: VIDEO POKER, HOLD'EM, SLOTS, BLACKJACK, WAR
 - Serial screenshot capture via RGB332 protocol (`screenshot.py` included)
 - Custom geometric card and symbol art — all drawn with TFT_eSPI primitives, no bitmaps
 

@@ -152,8 +152,8 @@ static const uint16_t PAYOUTS[] = {1000, 500, 100, 40, 10, 7, 5, 3, 2, 1};
 // Mode toggle button (same style as action button)
 #define MODE_BTN_X       BTN_X
 #define MODE_BTN_W       76
-#define MODE_BTN_Y       58    // top of right panel, where action button was
-#define MODE_BTN_H       20
+#define MODE_BTN_Y       50    // top of right panel, where action button was
+#define MODE_BTN_H       18
 
 // Hold'em back-to-video-poker button (top-left corner)
 #define HM_BACK_X        4

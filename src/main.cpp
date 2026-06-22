@@ -17,6 +17,8 @@ static TFT_eSPI    *disp = &tft;  // drawing target — normally &tft, swapped t
 #include "holdem.h"
 #include "slots.h"
 #include "settings.h"
+#include "blackjack.h"
+#include "war.h"
 
 static SPIClass    touchSPI(VSPI);
 static XPT2046_Touchscreen ts(TOUCH_CS);
@@ -34,7 +36,7 @@ static bool     hold[5] = {false};
 static bool     used[60] = {false};
 static uint8_t  jokers = 0;
 static uint8_t  dice = 0;
-static uint8_t  gameMode = 0;      // 0=5-card draw, 1=Texas Hold'em
+static uint8_t  gameMode = 0;      // 0=5-card draw, 1=Texas Hold'em, 2=Slots, 3=Settings, 4=Blackjack, 5=War
 
 
 // ── NVS convenience wrappers ────────────────────────────────────────────────
@@ -611,6 +613,16 @@ static void redrawAll(TFT_eSPI &d) {
         disp = prev; return;
     }
 
+    if (gameMode == 4) {
+        blackjackDraw(d, credits);
+        disp = prev; return;
+    }
+
+    if (gameMode == 5) {
+        warDraw(d, credits);
+        disp = prev; return;
+    }
+
     d.fillScreen(COL_BG);
 
     drawPayTable();
@@ -640,6 +652,26 @@ static void redrawAll(TFT_eSPI &d) {
             disp->setTextFont(1);
             disp->setTextColor(g_themeColor, COL_BG);
             drawCenterText(sx + MODE_BTN_W / 2, sy + MODE_BTN_H / 2, "SLOTS");
+        }
+        // BLACKJACK button
+        {
+            int bx = MODE_BTN_X, by = MODE_BTN_Y + (MODE_BTN_H + 4) * 2;
+            disp->fillRoundRect(bx, by, MODE_BTN_W, MODE_BTN_H, 5, COL_BG);
+            disp->drawRoundRect(bx, by, MODE_BTN_W, MODE_BTN_H, 5, g_themeColor);
+            disp->drawRoundRect(bx + 1, by + 1, MODE_BTN_W - 2, MODE_BTN_H - 2, 5, g_themeColor);
+            disp->setTextFont(1);
+            disp->setTextColor(g_themeColor, COL_BG);
+            drawCenterText(bx + MODE_BTN_W / 2, by + MODE_BTN_H / 2, "BLACKJACK");
+        }
+        // WAR button
+        {
+            int bx = MODE_BTN_X, by = MODE_BTN_Y + (MODE_BTN_H + 4) * 3;
+            disp->fillRoundRect(bx, by, MODE_BTN_W, MODE_BTN_H, 5, COL_BG);
+            disp->drawRoundRect(bx, by, MODE_BTN_W, MODE_BTN_H, 5, g_themeColor);
+            disp->drawRoundRect(bx + 1, by + 1, MODE_BTN_W - 2, MODE_BTN_H - 2, 5, g_themeColor);
+            disp->setTextFont(1);
+            disp->setTextColor(g_themeColor, COL_BG);
+            drawCenterText(bx + MODE_BTN_W / 2, by + MODE_BTN_H / 2, "WAR");
         }
         disp->fillRect(0, CARD_Y - 2, SCREEN_W, CARD_H + 20, COL_BG);
         drawEmptySlots();
@@ -745,7 +777,7 @@ static void startDeal() {
     if (win >= 0) highlightWin(g_themeColor);
     // Clear old centered DEAL button + mode toggle area
     disp->fillRect(SCREEN_W/2 - 32, 107, 65, 20, COL_BG);
-    disp->fillRect(RIGHT_X, MODE_BTN_Y, RIGHT_W, MODE_BTN_H * 2 + 8, COL_BG);
+    disp->fillRect(RIGHT_X, MODE_BTN_Y, RIGHT_W, MODE_BTN_H * 4 + 16, COL_BG);
     drawActionButton("DRAW");
     drawMessage("TAP  CARDS  TO  HOLD  .  THEN  DRAW", g_themeColor);
     gamePhase = 1;
@@ -1267,6 +1299,8 @@ void setup() {
     loadCredits();
     holdemInit();
     slotsInit();
+    blackjackInit();
+    warInit();
 
     tft.init();
 
@@ -1361,6 +1395,8 @@ void loop() {
 
     // ── Slots animation (runs every frame, independent of touch) ──────
     if (gameMode == 2) slotsAnimate(tft, credits);
+    if (gameMode == 4 && blackjackTick(tft, credits)) redrawAll();
+    if (gameMode == 5 && warTick(tft, credits)) redrawAll();
 
     readTouch();
     if (!touched) { delay(40); return; }
@@ -1371,8 +1407,8 @@ void loop() {
         return;
     }
 
-    // ── Settings gear icon (any mode) ────────────────────────────
-    if (gameMode != 3 && settingsHitGearIcon(tx, ty)) {
+    // ── Settings gear icon (only from main screens) ──────────────
+    if (gameMode <= 2 && settingsHitGearIcon(tx, ty)) {
         g_prevGameMode = gameMode;
         gameMode = 3;
         redrawAll();
@@ -1553,6 +1589,46 @@ void loop() {
         return;
     }
 
+    // ── Blackjack mode ──────────────────────────────────────────────
+    if (gameMode == 4) {
+        // VIDEO POKER back button works in all phases
+        if (tx >= HM_BACK_X && tx <= HM_BACK_X + HM_BACK_W &&
+            ty >= HM_BACK_Y && ty <= HM_BACK_Y + HM_BACK_H) {
+            gameMode = 0;
+            gamePhase = 0;
+            redrawAll();
+            delay(300);
+            return;
+        }
+
+        if (blackjackTap(tft, tx, ty, credits)) {
+            saveCredits();
+            redrawAll();
+        }
+        delay(120);
+        return;
+    }
+
+    // ── War mode ────────────────────────────────────────────────────
+    if (gameMode == 5) {
+        // VIDEO POKER back button works in all phases
+        if (tx >= HM_BACK_X && tx <= HM_BACK_X + HM_BACK_W &&
+            ty >= HM_BACK_Y && ty <= HM_BACK_Y + HM_BACK_H) {
+            gameMode = 0;
+            gamePhase = 0;
+            redrawAll();
+            delay(300);
+            return;
+        }
+
+        if (warTap(tft, tx, ty, credits)) {
+            saveCredits();
+            redrawAll();
+        }
+        delay(120);
+        return;
+    }
+
     // ── Theme cycle: tap theme name in credits area ─────────────────
     if (gamePhase == 0 && tx > RIGHT_X && ty < 30) {
         themeNext();
@@ -1647,6 +1723,28 @@ void loop() {
                 g_slots.winAmount = 0;
                 g_slots.gambling = false;
                 g_slots.gambleAmount = 0;
+                redrawAll();
+                delay(300);
+                return;
+            }
+
+            // BLACKJACK button
+            int bjY = MODE_BTN_Y + (MODE_BTN_H + 4) * 2;
+            if (tx >= sx && tx <= sx + MODE_BTN_W &&
+                ty >= bjY && ty <= bjY + MODE_BTN_H) {
+                gameMode = 4;
+                blackjackInit();
+                redrawAll();
+                delay(300);
+                return;
+            }
+
+            // WAR button
+            int warY = MODE_BTN_Y + (MODE_BTN_H + 4) * 3;
+            if (tx >= sx && tx <= sx + MODE_BTN_W &&
+                ty >= warY && ty <= warY + MODE_BTN_H) {
+                gameMode = 5;
+                warInit();
                 redrawAll();
                 delay(300);
                 return;

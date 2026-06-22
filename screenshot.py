@@ -30,15 +30,47 @@ BAUD = 115200
 W, H = 320, 240
 
 
-def find_port():
-    """Auto-detect CYD serial port, or fall back to COM11."""
+def list_ports():
+    """Return list of (device, description) tuples (serial + fallback via Windows registry)."""
+    ports = []
     try:
         import serial.tools.list_ports
-        for p in serial.tools.list_ports.comports():
-            if any(x in (p.description or "") for x in ["CH340", "CP210", "USB-SERIAL", "USB Serial"]):
-                return p.device
+        ports = [(p.device, p.description) for p in serial.tools.list_ports.comports()]
     except Exception:
         pass
+
+    # Fallback: scan Windows registry for CH340 / CP210 devices that pyserial might miss
+    if not ports or len(ports) <= 1:
+        try:
+            import winreg
+            reg = winreg.ConnectRegistry(None, winreg.HKEY_LOCAL_MACHINE)
+            key = winreg.OpenKey(reg, r"HARDWARE\DEVICEMAP\SERIALCOMM")
+            i = 0
+            while True:
+                try:
+                    name, value, _ = winreg.EnumValue(key, i)
+                    existing = [p[0] for p in ports]
+                    if value not in existing:
+                        ports.append((value, name))
+                    i += 1
+                except OSError:
+                    break
+        except Exception:
+            pass
+
+    return ports
+
+
+def find_port():
+    """Auto-detect CYD serial port, or fall back to COM11."""
+    ports = list_ports()
+    for device, desc in ports:
+        if any(x in (desc or "") for x in ["CH340", "CP210", "USB-SERIAL", "USB Serial"]):
+            return device
+    # Fall back to first available COM port (not COM1 usually)
+    for device, desc in ports:
+        if device != "COM1":
+            return device
     return "COM11"
 
 
@@ -66,9 +98,16 @@ def parse_args(argv):
 
 def ask_interactive():
     print("CYD-Poker Screenshot")
+    ports = list_ports()
+    if ports:
+        print("Available ports:")
+        for dev, desc in ports:
+            print(f"  {dev}: {desc}")
+    else:
+        print("No COM ports detected.")
     port = input(f"COM port [{DEFAULT_PORT}]: ").strip() or DEFAULT_PORT
     print("\nNavigate to the screen you want on the device first.")
-    print("(Video Poker, Texas Hold'em, or Slots)")
+    print("(Video Poker, Texas Hold'em, Slots, Blackjack, or War)")
     outfile = input("Output file [screen.bmp]: ").strip() or "screen.bmp"
     return port.upper(), outfile
 
@@ -142,7 +181,19 @@ def open_serial_no_reset(port):
 
 def capture(port, outfile):
     print(f"Opening {port} without reset...")
-    ser = open_serial_no_reset(port)
+    try:
+        ser = open_serial_no_reset(port)
+    except serial.SerialException as e:
+        ports = list_ports()
+        if ports:
+            print(f"Error opening {port}: {e}")
+            print("Available ports:")
+            for dev, desc in ports:
+                print(f"  {dev}: {desc}")
+        else:
+            print(f"Error: Could not open {port} and no other COM ports found.")
+            print("Make sure the CYD is plugged in via USB.")
+        raise
 
     try:
         time.sleep(0.2)
