@@ -10,9 +10,9 @@ Five games for the ESP32-32E (1-USB) and 2USB CYD (Cheap Yellow Display) — cla
 |-------------|---------------|-------|
 | ![Video Poker](https://raw.githubusercontent.com/xXQuantumSmokeXx/xXCYD-PokerXx/main/Screenshots/Main-Screen.png) | ![Texas Hold'em](https://raw.githubusercontent.com/xXQuantumSmokeXx/xXCYD-PokerXx/main/Screenshots/Texas-Hold'em.png) | ![Slots](https://raw.githubusercontent.com/xXQuantumSmokeXx/xXCYD-PokerXx/main/Screenshots/Slot-Machine.png) |
 
-| Blackjack | War |
-|-----------|-----|
-| ![Blackjack](https://raw.githubusercontent.com/xXQuantumSmokeXx/xXCYD-PokerXx/main/Screenshots/BlackJack.png) | ![War](https://raw.githubusercontent.com/xXQuantumSmokeXx/xXCYD-PokerXx/main/Screenshots/War.png) |
+| Blackjack | War | Settings |
+|-----------|-----|----------|
+| ![Blackjack](https://raw.githubusercontent.com/xXQuantumSmokeXx/xXCYD-PokerXx/main/Screenshots/BlackJack.png) | ![War](https://raw.githubusercontent.com/xXQuantumSmokeXx/xXCYD-PokerXx/main/Screenshots/War.png) | ![Settings](https://raw.githubusercontent.com/xXQuantumSmokeXx/xXCYD-PokerXx/main/Screenshots/Settings.png) |
 
 ### Features
 
