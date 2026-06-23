@@ -360,6 +360,13 @@ static void warDoFlip() {
         return;
     }
 
+    // Periodic shuffle to break deterministic card cycles (every ~7 rounds)
+    int totalRounds = g_war.roundsWon + g_war.roundsLost;
+    if (totalRounds > 0 && (totalRounds % 7) == 0) {
+        warShuffleRange(g_war.playerStart, g_war.playerEnd);
+        warShuffleRange(g_war.dealerStart, g_war.dealerEnd);
+    }
+
     g_war.phase = WAR_REVEAL;
 
     // Check for game over
@@ -438,6 +445,7 @@ static void warResolveWar() {
         g_war.warPot[g_war.warPotCount++] = g_war.warPlayerCard;
         g_war.warPot[g_war.warPotCount++] = g_war.warDealerCard;
         warAddToPlayer(g_war.warPot, g_war.warPotCount);
+        warShuffleRange(g_war.playerStart, g_war.playerEnd);  // break deterministic cycles
         g_war.warPotCount = 0;
         g_war.inWar = false;
         g_war.lastResult = 1;
@@ -449,6 +457,7 @@ static void warResolveWar() {
         g_war.warPot[g_war.warPotCount++] = g_war.warPlayerCard;
         g_war.warPot[g_war.warPotCount++] = g_war.warDealerCard;
         warAddToDealer(g_war.warPot, g_war.warPotCount);
+        warShuffleRange(g_war.dealerStart, g_war.dealerEnd);  // break deterministic cycles
         g_war.warPotCount = 0;
         g_war.inWar = false;
         g_war.lastResult = -1;
@@ -471,6 +480,9 @@ static void warResolveWar() {
             // Return face-up cards to each side
             warAddToPlayer(&g_war.playerCard, 1);
             warAddToDealer(&g_war.dealerCard, 1);
+            // Shuffle both piles to break deterministic tie cycles
+            warShuffleRange(g_war.playerStart, g_war.playerEnd);
+            warShuffleRange(g_war.dealerStart, g_war.dealerEnd);
             g_war.warPotCount = 0;
             g_war.inWar = false;
             g_war.lastResult = 0;

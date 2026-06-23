@@ -45,7 +45,8 @@ static bool bjIsBlackjack(const uint8_t* cards, uint8_t count) {
 // ── Fisher-Yates shuffle ──────────────────────────────────────────────────
 
 static void bjShuffle(uint8_t* deck) {
-    for (int i = 0; i < 52; i++) deck[i] = i;
+    // Use cards 4-55: ranks 1-13 (A-K), suits 0-3 — 52 cards, no Jokers
+    for (int i = 0; i < 52; i++) deck[i] = i + 4;
     for (int i = 51; i > 0; i--) {
         int j = random(i + 1);
         uint8_t t = deck[i]; deck[i] = deck[j]; deck[j] = t;
