@@ -206,16 +206,17 @@ static void warDrawScreen(TFT_eSPI &d, unsigned long credits) {
         drawCardBack(d, WAR_DLR_CARD_X, WAR_DLR_CARD_Y);
 
     // War zone — dealer burn + face-up on LEFT, player burn + face-up on RIGHT
-    if (g_war.inWar || g_war.phase == WAR_WAR) {
+    // Show during WAR_WAR animation AND during WAR_REVEAL so player can study the result
+    if (g_war.inWar || g_war.phase == WAR_WAR || g_war.warDepth > 0) {
         // "WAR!" depth label
         d.setTextFont(1); d.setTextColor(COL_RED, COL_BG);
         d.setTextDatum(MC_DATUM);
         if (g_war.warDepth > 1) {
             char wbuf[20];
             sprintf(wbuf, "WAR x%d!", g_war.warDepth);
-            d.drawString(wbuf, SCREEN_W/2, WAR_WAR_Y - 14);
+            d.drawString(wbuf, SCREEN_W/2, WAR_WAR_Y - 49);
         } else {
-            d.drawString("WAR!", SCREEN_W/2, WAR_WAR_Y - 14);
+            d.drawString("WAR!", SCREEN_W/2, WAR_WAR_Y - 49);
         }
 
         // Each side: 3 face-down + 1 face-up = 4 cards total
@@ -245,10 +246,11 @@ static void warDrawScreen(TFT_eSPI &d, unsigned long credits) {
                            WAR_WAR_Y, g_war.warPlayerCard);
     }
 
-    // Result text
+    // Result text — moved up during war to clear the war cards
     d.setTextFont(2); d.setTextColor(COL_GOLD, COL_BG);
     d.setTextDatum(MC_DATUM);
-    d.drawString(g_war.resultMsg, SCREEN_W/2, WAR_RESULT_Y);
+    int resultY = (g_war.warDepth > 0) ? WAR_RESULT_Y - 35 : WAR_RESULT_Y;
+    d.drawString(g_war.resultMsg, SCREEN_W/2, resultY);
 
     // Action button (reveal / game over)
     if (g_war.phase == WAR_REVEAL) {
@@ -264,7 +266,7 @@ static void warDrawScreen(TFT_eSPI &d, unsigned long credits) {
     if (g_war.phase == WAR_GAME_OVER) {
         d.setTextFont(1); d.setTextColor(g_themeColor, COL_BG);
         d.setTextDatum(MC_DATUM);
-        d.drawString("GAME  OVER", SCREEN_W/2, WAR_RESULT_Y + 24);
+        d.drawString("WAR OVER", SCREEN_W/2, WAR_RESULT_Y + 29);
 
         int bx = SCREEN_W/2 - WAR_BTN_W/2;
         d.fillRoundRect(bx, WAR_BTN_Y, WAR_BTN_W, WAR_BTN_H, 6, COL_BG);
@@ -281,15 +283,18 @@ static void warDrawScreen(TFT_eSPI &d, unsigned long credits) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 static void warStartGame() {
-    // Initialize full deck
-    for (int i = 0; i < 52; i++) g_war.deck[i] = i;
+    // Initialize full deck (shifted so cardRank() produces 1-13 = Ace-King)
+    for (int i = 0; i < 52; i++) g_war.deck[i] = i + 4;
     // Shuffle
     warShuffleRange(0, 52);
-    // Split
+    // Split — dealer starts at index 52 so piles can never overlap
+    // (player max = 52 cards at [0..51], dealer starts at 52)
     g_war.playerStart = 0;
     g_war.playerEnd   = 26;
-    g_war.dealerStart = 26;
-    g_war.dealerEnd   = 52;
+    g_war.dealerStart = 52;
+    g_war.dealerEnd   = 78;
+    // Copy dealer's 26 cards to their safe region
+    memcpy(&g_war.deck[52], &g_war.deck[26], 26);
     // Shuffle each half independently
     warShuffleRange(g_war.playerStart, g_war.playerEnd);
     warShuffleRange(g_war.dealerStart, g_war.dealerEnd);
@@ -319,7 +324,7 @@ static void warDoFlip() {
             sprintf(g_war.resultMsg, "YOU  WIN!  +%lu", WAR_PAYOUT);
         } else {
             g_war.payout = 0;
-            strcpy(g_war.resultMsg, "YOU  LOSE");
+            strcpy(g_war.resultMsg, "YOU LOSE");
         }
         g_war.phase = WAR_GAME_OVER;
         return;
@@ -352,7 +357,9 @@ static void warDoFlip() {
         g_war.warDepth = 1;
         g_war.warPotCount = 0;
         g_war.lastResult = 0;
-        sprintf(g_war.resultMsg, "WAR!");
+        sprintf(g_war.resultMsg, "WAR! %s=%s",
+            rankStr(cardRank(g_war.playerCard)),
+            rankStr(cardRank(g_war.dealerCard)));
         // Start war animation
         g_war.animTimer = millis();
         g_war.animStep = 0;
@@ -369,15 +376,14 @@ static void warDoFlip() {
 
     g_war.phase = WAR_REVEAL;
 
-    // Check for game over
-    if (dc <= 0 || pc <= 0) {
-        if (dealerCount() <= 0) {
-            g_war.payout = WAR_PAYOUT;
-            sprintf(g_war.resultMsg, "YOU  WIN!  +%lu", WAR_PAYOUT);
-        } else if (playerCount() <= 0) {
-            g_war.payout = 0;
-            strcpy(g_war.resultMsg, "GAME  OVER  —  YOU  LOSE");
-        }
+    // Check for game over (use fresh counts after card transfers)
+    if (dealerCount() <= 0) {
+        g_war.payout = WAR_PAYOUT;
+        sprintf(g_war.resultMsg, "YOU  WIN!  +%lu", WAR_PAYOUT);
+        g_war.phase = WAR_GAME_OVER;
+    } else if (playerCount() <= 0) {
+        g_war.payout = 0;
+        strcpy(g_war.resultMsg, "YOU LOSE");
         g_war.phase = WAR_GAME_OVER;
     }
 }
@@ -450,7 +456,9 @@ static void warResolveWar() {
         g_war.inWar = false;
         g_war.lastResult = 1;
         g_war.roundsWon++;
-        sprintf(g_war.resultMsg, "YOU  WIN  THE  WAR!");
+        sprintf(g_war.resultMsg, "WIN WAR %s>%s",
+            rankStr(cardRank(g_war.warPlayerCard)),
+            rankStr(cardRank(g_war.warDealerCard)));
         g_war.phase = WAR_REVEAL;
     } else if (cmp < 0) {
         // ── Dealer wins the war ──
@@ -462,7 +470,9 @@ static void warResolveWar() {
         g_war.inWar = false;
         g_war.lastResult = -1;
         g_war.roundsLost++;
-        sprintf(g_war.resultMsg, "DEALER  WINS  WAR");
+        sprintf(g_war.resultMsg, "LOSE WAR %s<%s",
+            rankStr(cardRank(g_war.warPlayerCard)),
+            rankStr(cardRank(g_war.warDealerCard)));
         g_war.phase = WAR_REVEAL;
     } else {
         // ── War ties again! ──
@@ -486,13 +496,17 @@ static void warResolveWar() {
             g_war.warPotCount = 0;
             g_war.inWar = false;
             g_war.lastResult = 0;
-            sprintf(g_war.resultMsg, "TRIPLE  WAR  —  SPLIT!");
+            sprintf(g_war.resultMsg, "SPLIT! %s=%s",
+                rankStr(cardRank(g_war.playerCard)),
+                rankStr(cardRank(g_war.dealerCard)));
             g_war.phase = WAR_REVEAL;
         } else {
             // Another war — stay in WAR_WAR phase for animation
             g_war.animStep = 0;
             g_war.animTimer = millis();
-            sprintf(g_war.resultMsg, "ANOTHER  WAR!");
+            sprintf(g_war.resultMsg, "WAR x%d %s=%s", g_war.warDepth,
+                rankStr(cardRank(g_war.playerCard)),
+                rankStr(cardRank(g_war.dealerCard)));
         }
         return;
     }
@@ -500,7 +514,7 @@ static void warResolveWar() {
     // Check game over after resolution
     if (playerCount() <= 0) {
         g_war.payout = 0;
-        strcpy(g_war.resultMsg, "GAME  OVER  —  YOU  LOSE");
+        strcpy(g_war.resultMsg, "YOU LOSE");
         g_war.phase = WAR_GAME_OVER;
     } else if (dealerCount() <= 0) {
         g_war.payout = WAR_PAYOUT;
@@ -576,8 +590,11 @@ bool warTap(TFT_eSPI &d, int16_t tx, int16_t ty, unsigned long &credits) {
             g_war.phase = WAR_PLAYING;
             g_war.playerCard = 0xFF;
             g_war.dealerCard = 0xFF;
+            g_war.warPlayerCard = 0xFF;
+            g_war.warDealerCard = 0xFF;
             g_war.inWar = false;
             g_war.warDepth = 0;
+            g_war.animStep = 0;
             g_war.resultMsg[0] = '\0';
             return true;
         }
@@ -615,8 +632,8 @@ bool warTick(TFT_eSPI &d, unsigned long credits) {
         return false;
     }
 
-    // Step through war animation: 3 burn cards (400ms each), then reveal (600ms)
-    int delayMs = (g_war.animStep < 3) ? 400 : 600;
+    // Step through war animation: 3 burn cards (600ms each), then reveal (900ms)
+    int delayMs = (g_war.animStep < 3) ? 600 : 900;
 
     if (now - g_war.animTimer >= delayMs) {
         g_war.animTimer = now;

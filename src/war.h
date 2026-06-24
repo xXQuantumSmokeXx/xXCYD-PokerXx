@@ -14,7 +14,7 @@
 #define WAR_PLY_CARD_X    (SCREEN_W - 40 - CARD_W)  // player card position
 #define WAR_PLY_CARD_Y    60      // moved down 10px
 #define WAR_LABEL_Y       25      // pile count labels, moved down 5px
-#define WAR_RESULT_Y      160     // result text, moved down
+#define WAR_RESULT_Y      160     // regular round result text
 #define WAR_BTN_Y         197     // action button
 #define WAR_BTN_W         120
 #define WAR_BTN_H         26
@@ -42,7 +42,8 @@ struct WarState {
     // Player owns deck[playerStart .. playerEnd-1]
     // Dealer owns deck[dealerStart .. dealerEnd-1]
     // Cards are drawn from the END (top of pile), added to START (bottom)
-    uint8_t  deck[52];
+    // Array is 2x card count so piles never overlap when one side accumulates
+    uint8_t  deck[104];
     uint8_t  playerStart;
     uint8_t  playerEnd;
     uint8_t  dealerStart;
