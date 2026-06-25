@@ -114,4 +114,4 @@ Also check out [xXCYD-BreakoutXx](https://github.com/xXQuantumSmokeXx/xXCYD-Brea
 
 Built by xXQuantum-SmokeXx, with development assistance from Codex & Claude Code.
 
-UI design ported from the "QuantumSix" "VR project", originally developed in collaboration with "Six" & "Nova"...
+
