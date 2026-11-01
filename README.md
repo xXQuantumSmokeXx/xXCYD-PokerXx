@@ -2,7 +2,7 @@
 
 Five games for the ESP32-32E (1-USB) and 2USB CYD (Cheap Yellow Display) — classic 5-Card Draw Joker Poker, heads-up Texas Hold'em against xXSmokeXx (AI), a 3-reel poker-suit slot machine, **Blackjack**, and **War**.
 
-[![Support on Patreon](https://img.shields.io/badge/Support-Patreon-orange)](https://www.patreon.com/c/xXQuantumSmokeXx)
+[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-xXSmokeXx-FFDD00?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/xXSmokeXx)
 
 ## Screens
 
